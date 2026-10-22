@@ -1,0 +1,84 @@
+{
+  "birim": "mm",
+  "koordinat": "kutu iç tabanı z=0, iç boşluk merkezi (0,0); marker 'yukarı' yönü +z",
+  "markerler": [
+    {
+      "id": 0,
+      "sozluk": "DICT_4X4_50",
+      "kenar": 17.5,
+      "merkez": [
+        15.0,
+        0,
+        10.75
+      ],
+      "normal": [
+        1,
+        0,
+        0
+      ]
+    },
+    {
+      "id": 1,
+      "sozluk": "DICT_4X4_50",
+      "kenar": 17.5,
+      "merkez": [
+        0,
+        15.0,
+        10.75
+      ],
+      "normal": [
+        0,
+        1,
+        0
+      ]
+    },
+    {
+      "id": 2,
+      "sozluk": "DICT_4X4_50",
+      "kenar": 17.5,
+      "merkez": [
+        -15.0,
+        0,
+        10.75
+      ],
+      "normal": [
+        -1,
+        0,
+        0
+      ]
+    },
+    {
+      "id": 3,
+      "sozluk": "DICT_4X4_50",
+      "kenar": 17.5,
+      "merkez": [
+        0,
+        -15.0,
+        10.75
+      ],
+      "normal": [
+        0,
+        -1,
+        0
+      ]
+    }
+  ],
+  "ic_bosluk": 22.0,
+  "kup": {
+    "kenar": 15.0,
+    "referans_poz": {
+      "aciklama": "-x,-y köşesine yaslı, düz",
+      "merkez": [
+        -3.5,
+        -3.5,
+        7.5
+      ],
+      "z_aci_derece": 0
+    }
+  },
+  "zarf": {
+    "eksen_basina_serbest_yol": 7.0,
+    "merkez_max_yatay_kayma_dik": 9.9,
+    "z_etrafinda_serbest_donme": true
+  }
+}

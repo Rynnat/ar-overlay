@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Kutu Overlay v0</title>
+<style>
+  :root { --bg:#0d0f12; --fg:#e8ebef; --soluk:#8a929c; --vurgu:#36d6c3; --uyari:#ffb347; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--fg); font:14px system-ui, sans-serif; }
+  #sahne { position:relative; width:100%; }
+  canvas#ekran { width:100%; display:block; background:#000; }
+  canvas#maske { position:absolute; right:8px; top:8px; width:28%; border:1px solid var(--soluk); display:none; }
+  #panel { padding:10px max(12px, env(safe-area-inset-left)); display:grid; gap:10px; }
+  .satir { display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
+  button { background:#1d232b; color:var(--fg); border:1px solid #2f3842; border-radius:8px; padding:10px 14px; font-size:15px; }
+  button.aktif { border-color:var(--vurgu); color:var(--vurgu); }
+  label { display:flex; gap:8px; align-items:center; width:100%; }
+  input[type=range] { flex:1; }
+  #durum { font-family:ui-monospace, monospace; font-size:13px; color:var(--soluk); white-space:pre-line; }
+  #olcum { font-family:ui-monospace, monospace; font-size:18px; color:var(--uyari); min-height:1.4em; }
+</style>
+</head>
+<body>
+<div id="sahne">
+  <canvas id="ekran"></canvas>
+  <canvas id="maske"></canvas>
+</div>
+<div id="panel">
+  <div class="satir">
+    <button id="basla">Kamerayı başlat</button>
+    <button id="kapak" class="aktif">Kapak: takılı</button>
+    <button id="maskeBtn">Maske</button>
+    <button id="odak">Odağı kilitle</button>
+  </div>
+  <label>Eşik <input id="esik" type="range" min="20" max="230" value="110"><span id="esikV">110</span>
+    <input id="otomatik" type="checkbox" checked> oto</label>
+  <label>Görüş açısı° <input id="fov" type="range" min="45" max="85" value="65"><span id="fovV">65</span></label>
+  <div id="olcum"></div>
+  <div id="durum">OpenCV yükleniyor…</div>
+</div>
+<script src="app.js"></script>
+<script async src="vendor/opencv.js" onload="cvYuklendi()"></script>
+</body>
+</html>

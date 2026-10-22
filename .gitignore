@@ -1,0 +1,7 @@
+app/cert/
+app/server.py
+# iptal edilen v1 (sabit küp)
+asama0/kup.py
+asama0/geometri.json
+asama0/stl/
+__pycache__/
