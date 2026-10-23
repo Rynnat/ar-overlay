@@ -4,7 +4,7 @@
 // Ölçüm her zaman HAM pozdan; 1€ filtresi yalnız çizimde. "Ölç" modu sabit telefonda titremeyi sayıyla verir.
 // Geometri: ../asama0/v2/geometri.json (kutu), ../asama0/v3/geometri_v3.json (taban). mm, iç taban z=0, +z kameraya.
 
-const SURUM = "v1.2";   // her yayında artır; ekranda görünür (doğru sürüm mü kontrolü)
+const SURUM = "v1.3";   // her yayında artır; ekranda görünür (doğru sürüm mü kontrolü)
 
 const G = {
   dis: 30,            // kutu dış kenar (kapak da 30)
@@ -51,20 +51,25 @@ function cvYuklendi() {
 }
 function durum(t) { $("durum").textContent = t; }
 
-$("basla").onclick = async () => {
+async function kameraBaslat() {
+  if (akis) return;
   try {
     akis = await navigator.mediaDevices.getUserMedia({
       video: { facingMode: "environment", width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false,
     });
-  } catch (e) { durum("Kamera açılamadı: " + e.message + "\n(HTTPS ile açtığından emin ol)"); return; }
+  } catch (e) { akis = null; durum("Kamera açılamadı: " + e.message + "\n(\"Kamerayı başlat\"a dokun)"); return; }
   video.srcObject = akis; await video.play();
   ekran.width = video.videoWidth; ekran.height = video.videoHeight;
   islemC.width = ISLEM_G; islemC.height = Math.round(ISLEM_G * video.videoHeight / video.videoWidth);
   maskeC.width = islemC.width; maskeC.height = islemC.height;
   $("basla").textContent = "Çalışıyor";
-  oturumBaslat({ surum: SURUM, mod: mod(), kamera: kameraBilgisi(), kalib, fov: +$("fov").value });
+  oturumBaslat({ surum: SURUM, mod: mod(), kamera: kameraBilgisi(), kalib, fov: +$("fov").value, jig: "etiketsiz",
+    parametreler: { G, TABAN, ISLEM_G, BOLGE, UZAK, OLCUM_KARE, TAKIP, FILTRE, OTO, HAM, KAYIT, POZ_SICRAMA_DER } });
   kareBekle();
-};
+}
+$("basla").onclick = kameraBaslat;
+// sayfa açılınca dene; tarayıcı dokunuş isterse düğme yedek olarak kalır
+kameraBaslat();
 // kamera karesi gelince işle (requestVideoFrameCallback); yoksa ekran tazelemesine bağlı
 function kareBekle() {
   if (video.requestVideoFrameCallback) video.requestVideoFrameCallback((_, meta) => { gelenKare++; dongu(meta); });
@@ -86,8 +91,25 @@ $("kilitBirak").onclick = () => { kilit = null; };
 $("teshis").onclick = () => { if (akis) tekKare = true; };
 for (const [id, v] of [["esik", "esikV"], ["fov", "fovV"]]) $(id).oninput = () => ($(v).textContent = $(id).value);
 
+// --- telefon hareketi: jiroskop + ivme, kareler arasında özetlenir ---
+const hareket = { gyroMax: 0, gyroToplam: 0, ivmeMax: 0, n: 0 };
+window.addEventListener("devicemotion", (e) => {
+  const g = e.rotationRate, a = e.acceleration;   // derece/s, m/s² (yerçekimsiz)
+  if (g) { const m = Math.hypot(g.alpha || 0, g.beta || 0, g.gamma || 0); hareket.gyroMax = Math.max(hareket.gyroMax, m); hareket.gyroToplam += m; }
+  if (a) hareket.ivmeMax = Math.max(hareket.ivmeMax, Math.hypot(a.x || 0, a.y || 0, a.z || 0));
+  hareket.n++;
+});
+function hareketAl() {
+  const h = { gyroMax: +hareket.gyroMax.toFixed(2), gyroOrt: hareket.n ? +(hareket.gyroToplam / hareket.n).toFixed(2) : null, ivmeMax: +hareket.ivmeMax.toFixed(3), n: hareket.n };
+  Object.assign(hareket, { gyroMax: 0, gyroToplam: 0, ivmeMax: 0, n: 0 });
+  return h;
+}
+
 // --- kamera ayar kilidi: odak + pozlama + beyaz dengesi (titremenin bir kaynağı otomatik ayarların oynaması) ---
-$("kameraKilit").onclick = async () => {
+let kameraKilitlendi = false;
+$("kameraKilit").onclick = () => kameraKilitle();
+async function kameraKilitle() {
+  kameraKilitlendi = true;
   const iz = akis && akis.getVideoTracks()[0];
   if (!iz) return;
   const yet = iz.getCapabilities ? iz.getCapabilities() : {}, ayar = iz.getSettings ? iz.getSettings() : {};
@@ -105,7 +127,7 @@ $("kameraKilit").onclick = async () => {
   $("kameraKilit").classList.add("aktif");
   $("kameraKilit").textContent = "Kilit: " + sonuc.join(", ");
   olayLog("kamera-kilit", { sonuc, ayar: iz.getSettings ? iz.getSettings() : null });
-};
+}
 function kameraBilgisi() {
   const iz = akis && akis.getVideoTracks()[0];
   if (!iz) return null;
@@ -427,6 +449,7 @@ function markerBul(gri) {
   const kose = new cv.MatVector(), ids = new cv.Mat(), red = new cv.MatVector(), out = [];
   try {
     arucoDet.detectMarkers(gri, kose, ids, red);
+    teshis.arucoRed = red.size();
     for (let i = 0; i < ids.rows; i++) {
       const c = kose.get(i), d = c.data32F;
       out.push({ id: ids.data32S[i], kose: [0, 1, 2, 3].map((j) => ({ x: d[2 * j], y: d[2 * j + 1] })) });
@@ -630,7 +653,7 @@ function takipEt(src, gri, simdi) {
   // dönüş: { kutu, durum: "yeni" | "doğrulandı" | "takipte" | "doğrulanmadı" } | null
   const w = src.cols, h = src.rows;
   if (!$("kilitAc").checked) kilit = null;
-  if (kilit && oncekiGri && !akisIzle(gri)) { kilit = null; teshis.kilitBirakildi = "noktalar kayboldu"; }
+  if (kilit && oncekiGri && !akisIzle(gri)) { kilit = null; teshis.kilitBirakildi = "noktalar kayboldu"; hamGoruntuIste("kilit-kayip"); }
   if (kilit && !ekrandaMi(kilit.kose, w, h)) { kilit = null; teshis.kilitBirakildi = "ekrandan çıktı"; }
 
   // tespit: kilitliyken kutunun çevresinde, değilken ortadaki çerçevede
@@ -686,7 +709,8 @@ $("kalibSifirla").onclick = () => {
   try { localStorage.removeItem("kalib"); } catch (e) { /* özel pencere */ }
   kalibYaz(); $("kalibEkle").textContent = "Kalib: görüntü ekle (0)";
 };
-$("kalibHesapla").onclick = () => {
+$("kalibHesapla").onclick = () => kalibHesapla();
+function kalibHesapla() {
   if (kalibGorunum.length < 8) { $("kalibDurum").textContent = `en az 8 görüntü gerekli (şu an ${kalibGorunum.length})`; return; }
   const objV = new cv.MatVector(), imgV = new cv.MatVector();
   for (const g of kalibGorunum) {
@@ -707,11 +731,11 @@ $("kalibHesapla").onclick = () => {
   } catch (e) {
     $("kalibDurum").textContent = "kalibrasyon başarısız: " + (typeof e === "number" ? cv.exceptionFromPtr(e).msg : e.message || e);
   } finally { [objV, imgV, K, D, rv, tv, s1, s2, pe].forEach((m) => m.delete()); }
-};
-function kalibGorunumEkle(markerler) {
+}
+function kalibGorunumEkle(markerler, r) {
   const bilinen = markerler.filter((m) => TABAN.merkez[m.id]);
   if (bilinen.length < 3) { $("kalibDurum").textContent = "en az 3 marker görünmeli"; return; }
-  kalibGorunum.push({ obj: bilinen.flatMap((m) => markerKose3B(m.id, 0).flat()), img: bilinen.flatMap((m) => m.kose.flatMap((p) => [p.x, p.y])) });
+  kalibGorunum.push({ r, obj: bilinen.flatMap((m) => markerKose3B(m.id, 0).flat()), img: bilinen.flatMap((m) => m.kose.flatMap((p) => [p.x, p.y])) });
   $("kalibEkle").textContent = `Kalib: görüntü ekle (${kalibGorunum.length})`;
   $("kalibDurum").textContent = "plakayı farklı açıdan (10-40° eğik) tut, tekrar ekle; 10+ olunca Hesapla";
 }
@@ -719,11 +743,12 @@ function kalibGorunumEkle(markerler) {
 // ====================== ÖLÇ modu ======================
 // Sabit telefonda OLCUM_KARE kare: ham köşeler, ham poz, yöntem, eşik, ms. Sonuç ekranda + JSON paylaş.
 let olcum = null;
-$("olc").onclick = () => {
-  if (!akis) return;
-  olcum = { bas: performance.now(), gelen0: gelenKare, kareler: [], mod: mod() };
+$("olc").onclick = () => { if (akis && !olcum) olcumBaslat("elle"); };
+function olcumBaslat(neden) {
+  hamGoruntuIste("olcum-bas");
+  olcum = { bas: performance.now(), gelen0: gelenKare, kareler: [], mod: mod(), neden };
   $("olc").textContent = "Ölçülüyor… 0/" + OLCUM_KARE; $("olc").classList.add("aktif");
-};
+}
 function olcumKaydet(kayit) {
   if (!olcum) return;
   olcum.kareler.push(kayit);
@@ -756,10 +781,11 @@ function olcumOzet(kareler, kaynak) {
   };
 }
 async function olcumBitir() {
-  const o = olcum; olcum = null;
+  const o = olcum; olcum = null; oto.sonOlcum = performance.now();
+  hamGoruntuIste("olcum-son");
   const sure = (performance.now() - o.bas) / 1000, ms = o.kareler.map((x) => x.ms);
   const ozet = {
-    surum: SURUM, zaman: new Date().toISOString(), mod: o.mod, kare: o.kareler.length, sureSn: +sure.toFixed(2),
+    surum: SURUM, zaman: new Date().toISOString(), mod: o.mod, neden: o.neden, kare: o.kareler.length, sureSn: +sure.toFixed(2),
     islenenFps: +(o.kareler.length / sure).toFixed(1), gelenFps: +((gelenKare - o.gelen0) / sure).toFixed(1),
     msOrt: +ort(ms).toFixed(1), msP95: +yuzdelik(ms, 0.95).toFixed(1),
     kalibreli: !!(kalib && kalib.w === islemC.width), fov: +$("fov").value, yumusat: $("yumusat").checked, kapakTakili,
@@ -788,9 +814,104 @@ async function olcumBitir() {
 }
 function kareKaydi(poz, anahtar, kose) {
   // ölçüm için HAM poz kaydı (filtresiz)
-  const kt = yansit(poz, [[0, 0, 0]])[0];
-  return { anahtar, kose: kose.flatMap((p) => [+p.x.toFixed(3), +p.y.toFixed(3)]), r: Array.from(poz.rvec.data64F), t: Array.from(poz.tvec.data64F),
+  const kt = yansit(poz, [[0, 0, 0]])[0], { R } = kutuCerceveR_t(poz);
+  // eğim: kamera ekseni ile kutu/plaka normali arasındaki açı (0 = tam tepeden)
+  const egim = Math.acos(Math.min(1, Math.abs(R[8]))) * 180 / Math.PI;
+  return { anahtar, egim: +egim.toFixed(2), kose: kose.flatMap((p) => [+p.x.toFixed(3), +p.y.toFixed(3)]), r: Array.from(poz.rvec.data64F), t: Array.from(poz.tvec.data64F),
     kupTaban: { x: kt.x, y: kt.y }, sicrama: !!poz.sicrama, fre: poz.fre };
+}
+
+// ====================== VERİ: görüntü kalitesi, kamera ayarı, ham kare ======================
+function goruntuKalitesi(gri, kayit) {
+  // parlaklık = ortalama gri; bulanıklık = ortadaki karede Laplace varyansı (düşük = bulanık)
+  kayit.parlaklik = +cv.mean(gri)[0].toFixed(1);
+  const a = Math.min(200, gri.cols, gri.rows), roi = gri.roi(new cv.Rect((gri.cols - a) >> 1, (gri.rows - a) >> 1, a, a));
+  const lap = new cv.Mat(), ort = new cv.Mat(), std = new cv.Mat();
+  try { cv.Laplacian(roi, lap, cv.CV_64F); cv.meanStdDev(lap, ort, std); kayit.bulaniklik = +(std.data64F[0] ** 2).toFixed(1); }
+  finally { roi.delete(); lap.delete(); ort.delete(); std.delete(); }
+}
+let sonKameraAyar = "", sonAyarBakis = 0;
+function kameraAyarDegisimi() {
+  // pozlama/ISO/odak/beyaz dengesi her 2 s'de bir okunur; değiştiyse kayda girer
+  const simdi = performance.now();
+  if (simdi - sonAyarBakis < 2000 || !akis) return undefined;
+  sonAyarBakis = simdi;
+  const a = akis.getVideoTracks()[0].getSettings ? akis.getVideoTracks()[0].getSettings() : {};
+  const ozet = { exposureMode: a.exposureMode, exposureTime: a.exposureTime, iso: a.iso, focusMode: a.focusMode, focusDistance: a.focusDistance,
+    whiteBalanceMode: a.whiteBalanceMode, colorTemperature: a.colorTemperature, zoom: a.zoom, width: a.width, height: a.height, frameRate: a.frameRate };
+  const j = JSON.stringify(ozet);
+  if (j === sonKameraAyar) return undefined;
+  sonKameraAyar = j; return ozet;
+}
+// ham tam çözünürlüklü kare: yeni algoritmaları aynı gerçek görüntülerde yeniden koşmak için (tekrar oynatma)
+const HAM = { periyotMs: 5000, olayAraMs: 2000, kalite: 0.92 };
+let sonHamPeriyot = 0, sonHamOlay = 0, hamIste = null;
+function hamGoruntuIste(neden) { hamIste = neden; }
+function hamGoruntuKontrol(simdi) {
+  if (!kayitDurum.anahtar || !akis) return;
+  let neden = null;
+  if (hamIste && simdi - sonHamOlay > HAM.olayAraMs) { neden = hamIste; hamIste = null; sonHamOlay = simdi; }
+  else if (simdi - sonHamPeriyot > HAM.periyotMs) { neden = "periyot"; sonHamPeriyot = simdi; }
+  if (!neden) return;
+  const c = document.createElement("canvas"); c.width = video.videoWidth; c.height = video.videoHeight;
+  c.getContext("2d").drawImage(video, 0, 0);
+  const t = Math.round(simdi - oturumBas);
+  c.toBlob((b) => b && blobYukle(`ham-${neden}-t${t}.jpg`, b), "image/jpeg", HAM.kalite);
+}
+
+// ====================== OTOMATİK PİLOT ======================
+// Kullanıcı yalnız telefonu tutar. Telefon sabitse ölçüm kendiliğinden başlar; poz ilk oturunca kamera
+// ayarları kilitlenir; plaka farklı açılardan görüldükçe kalibrasyon görüntüsü toplanıp hesaplanır;
+// kutunun içinde kırmızı küp görünürse kapak çıkık sayılır.
+const OTO = {
+  sabitKare: 30,         // bu kadar kare boyunca...
+  sabitPx: 1.5,          // ...küp taban izdüşümünün σ'sı bunun altındaysa telefon "sabit"
+  olcumAraMs: 20000,     // iki otomatik ölçüm arası en az
+  olcumKaymaPx: 10,      // ölçüm sırasında bu kadar kayarsa ölçüm iptal (telefon oynadı)
+  kilitGecikmeMs: 1500,  // poz ilk bulunduktan bu kadar sonra kamera kilidi (pozlama otursun)
+  kalibHedef: 12,        // bu kadar farklı açı toplanınca kalibrasyon hesaplanır
+  kalibFarkDer: 8,       // yeni görüntü eldekilerden en az bu kadar farklı açıda olmalı
+  kapakKare: 8,          // kapak durumu bu kadar kare tutarlıysa değişir
+};
+const oto = { iz: [], sonOlcum: -1e9, pozIlk: null, kapakSayac: 0, olcumBas: null };
+function otoPilot(simdi, kt, markerler, arucoPoz) {
+  if (!$("otoAc").checked) return;
+  // sabitlik: küp taban izdüşümü (hangi poz varsa) son N karede ne kadar oynadı
+  if (kt) oto.iz.push(kt); else oto.iz = [];
+  if (oto.iz.length > OTO.sabitKare) oto.iz.shift();
+  const sabit = oto.iz.length === OTO.sabitKare && Math.hypot(sd(oto.iz.map((p) => p.x)), sd(oto.iz.map((p) => p.y))) < OTO.sabitPx;
+  // kamera kilidi: poz ilk oturduktan biraz sonra, bir kez
+  if (kt && oto.pozIlk === null) oto.pozIlk = simdi;
+  if (!kameraKilitlendi && oto.pozIlk !== null && simdi - oto.pozIlk > OTO.kilitGecikmeMs) kameraKilitle();
+  // ölçüm: sabitken başlat, oynarsa iptal
+  if (!olcum && sabit && simdi - oto.sonOlcum > OTO.olcumAraMs) { olcumBaslat("oto"); oto.olcumBas = kt; }
+  if (olcum && olcum.neden === "oto" && kt && oto.olcumBas && Math.hypot(kt.x - oto.olcumBas.x, kt.y - oto.olcumBas.y) > OTO.olcumKaymaPx) {
+    olayLog("olcum-iptal", { neden: "telefon oynadı", kare: olcum.kareler.length });
+    olcum = null; oto.sonOlcum = simdi - OTO.olcumAraMs + 3000;   // 3 s sonra yeniden dene
+    $("olc").textContent = "Ölç (" + OLCUM_KARE + " kare)"; $("olc").classList.remove("aktif");
+  }
+  // kalibrasyon: kalibre değilken, sabite yakın karede, eldekilerden farklı açıdaysa topla
+  if (!kalib && arucoPoz && markerler.filter((m) => TABAN.merkez[m.id]).length >= 3 && oto.iz.length >= 5) {
+    const r = Array.from(arucoPoz.rvec.data64F);
+    const yeniAci = kalibGorunum.every((g) => aciFarki(rodrigues(g.r), rodrigues(r)) > OTO.kalibFarkDer);
+    const azOynuyor = Math.hypot(sd(oto.iz.slice(-5).map((p) => p.x)), sd(oto.iz.slice(-5).map((p) => p.y))) < 2;
+    if (yeniAci && azOynuyor) {
+      kalibGorunumEkle(markerler, r); hamGoruntuIste("kalib");
+      if (kalibGorunum.length >= OTO.kalibHedef) kalibHesapla();
+    }
+  }
+}
+function kapakOtomatik(kirmiziIcerde) {
+  // kırmızı küp kutunun içinde görünüyorsa kapak çıkık; birkaç kare tutarlı olunca değiştir
+  if (!$("otoAc").checked) return;
+  const istenen = !kirmiziIcerde;
+  if (istenen === kapakTakili) { oto.kapakSayac = 0; return; }
+  if (++oto.kapakSayac < OTO.kapakKare) return;
+  oto.kapakSayac = 0; kapakTakili = istenen;
+  $("kapak").textContent = "Kapak: " + (kapakTakili ? "takılı" : "çıkık") + " (oto)";
+  $("kapak").classList.toggle("aktif", kapakTakili);
+  olayLog("kapak", { kapakTakili, otomatik: true });
+  hamGoruntuIste("kapak");
 }
 
 // ====================== ANA DÖNGÜ ======================
@@ -806,14 +927,18 @@ function dongu(meta) {
   const s = ekran.width / islemC.width, W = islemC.width, H = islemC.height, m = mod();
   let bilgi = [], olcumYazi = "";
   const kayit = { ms: 0, aruco: null, markersiz: null };
+  const asama = {};   // aşama süreleri (ms)
+  let t0 = performance.now();
   try {
     cv.cvtColor(src, gri, cv.COLOR_RGBA2GRAY);
+    goruntuKalitesi(gri, kayit);
+    asama.hazirlik = performance.now() - t0; t0 = performance.now();
     let anaPoz = null;   // kırmızı küp ölçümü ve kalibrasyon bilgisi için öncelikli poz (aruco > markersız)
+    let markerler = [], arucoPozu = null;
 
     // --- ArUco taban ---
     if (m !== "markersiz") {
-      const markerler = markerBul(gri);
-      if (kalibIste) { kalibIste = false; kalibGorunumEkle(markerler); }
+      markerler = markerBul(gri);
       ctx.lineWidth = 2; ctx.font = `${Math.round(13 * s)}px system-ui`;
       for (const mk of markerler) {
         ctx.strokeStyle = TABAN.merkez[mk.id] ? "rgba(80,255,120,0.9)" : "rgba(255,80,80,0.9)";
@@ -827,10 +952,12 @@ function dongu(meta) {
         kayit.aruco = kareKaydi(poz, poz.ids.join("-"), bilinen.flatMap((x) => x.kose));
         const t = poz.tvec.data64F;
         bilgi.push(`ARUCO ${poz.markerSayisi} marker [${poz.ids}] · FRE ${poz.fre.toFixed(2)} px · ${Math.hypot(t[0], t[1], t[2]).toFixed(0)} mm`);
-        anaPoz = poz;
+        anaPoz = poz; arucoPozu = poz;
+        if (kalibIste) { kalibIste = false; kalibGorunumEkle(markerler, Array.from(poz.rvec.data64F)); }
       } else { bilgi.push(`ARUCO: plaka marker'ı yok (${markerler.length} marker görüldü)`); cizimFiltre.akutu = cizimFiltre.azarf = cizimFiltre.akup = undefined; }
     }
 
+    asama.aruco = performance.now() - t0; t0 = performance.now();
     // --- markersız ---
     if (m !== "aruco") {
       const tk = takipEt(src, gri, simdi);
@@ -871,10 +998,12 @@ function dongu(meta) {
     }
 
     // --- kapak çıkıkken: kırmızı küpün yeri (ham poz, ışın-düzlem kesişimi) ---
+    asama.markersiz = performance.now() - t0; t0 = performance.now();
+    const kir = anaPoz ? kirmiziBul(src) : null, kirYer = kir ? kupYeri(anaPoz, kir) : null;
+    if (anaPoz) kapakOtomatik(!!(kirYer && Math.abs(kirYer.x) < G.ic / 2 + 2 && Math.abs(kirYer.y) < G.ic / 2 + 2));
     if (anaPoz && !kapakTakili) {
-      const kir = kirmiziBul(src);
       if (kir) {
-        const yer = kupYeri(anaPoz, kir), tahmin = yansit(anaPoz, [[0, 0, G.kup]])[0];
+        const yer = kirYer, tahmin = yansit(anaPoz, [[0, 0, G.kup]])[0];
         ctx.strokeStyle = "#ff4d4d"; ctx.lineWidth = 3; ctx.beginPath();
         for (let j = 0; j < kir.kont.length; j += 2) (j ? ctx.lineTo : ctx.moveTo).call(ctx, kir.kont[j] * s, kir.kont[j + 1] * s);
         ctx.closePath(); ctx.stroke();
@@ -888,6 +1017,9 @@ function dongu(meta) {
         }
       } else olcumYazi = "kırmızı küp görünmüyor";
     }
+    asama.kirmizi = performance.now() - t0;
+    if (kirYer) kayit.kirmizi = { px: [+kir.x.toFixed(2), +kir.y.toFixed(2)], yerMm: [+kirYer.x.toFixed(2), +kirYer.y.toFixed(2)] };
+    otoPilot(simdi, anaPoz ? yansit(anaPoz, [[0, 0, 0]])[0] : null, markerler, arucoPozu);
     if (anaPoz) {
       teshis.tvec = Array.from(anaPoz.tvec.data64F).map((v) => +v.toFixed(1)); teshis.rvec = Array.from(anaPoz.rvec.data64F).map((v) => +v.toFixed(3));
       pozSil(anaPoz);
@@ -896,7 +1028,14 @@ function dongu(meta) {
   kayit.ms = performance.now() - simdi;
   islenenKare++;
   olcumKaydet(kayit);
-  kareLog({ mod: m, ms: +kayit.ms.toFixed(1), fps: +fps.toFixed(1), kapakTakili, durum: bilgi, aruco: kayit.aruco, markersiz: kayit.markersiz }, !!olcum);
+  kareLog({
+    mod: m, ms: +kayit.ms.toFixed(1), asama: Object.fromEntries(Object.entries(asama).map(([k, v]) => [k, +v.toFixed(1)])),
+    fps: +fps.toFixed(1), kare: meta ? { yakalama: meta.captureTime, medya: meta.mediaTime, sunulan: meta.presentedFrames } : null,
+    parlaklik: kayit.parlaklik, bulaniklik: kayit.bulaniklik, hareket: hareketAl(), kameraAyar: kameraAyarDegisimi(),
+    kapakTakili, olcumde: !!olcum, arucoRed: teshis.arucoRed, esik: teshis.esik1, reddedilen: teshis.reddedilen && [...new Set(teshis.reddedilen)],
+    durum: bilgi, aruco: kayit.aruco, markersiz: kayit.markersiz, kirmizi: kayit.kirmizi,
+  }, !!olcum);
+  hamGoruntuKontrol(simdi);
   if (gri.cols) { if (oncekiGri) oncekiGri.delete(); oncekiGri = gri; } else gri.delete();
   src.delete();
   if (olcumYazi) $("olcum").textContent = olcumYazi; else $("olcum").textContent = "";
