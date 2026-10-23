@@ -4,7 +4,7 @@
 // Ölçüm her zaman HAM pozdan; 1€ filtresi yalnız çizimde. "Ölç" modu sabit telefonda titremeyi sayıyla verir.
 // Geometri: ../asama0/v2/geometri.json (kutu), ../asama0/v3/geometri_v3.json (taban). mm, iç taban z=0, +z kameraya.
 
-const SURUM = "v1.10";   // her yayında artır; ekranda görünür (doğru sürüm mü kontrolü)
+const SURUM = "v1.11";   // her yayında artır; ekranda görünür (doğru sürüm mü kontrolü)
 
 const G = {
   dis: 30,            // kutu dış kenar (kapak da 30)
@@ -21,7 +21,7 @@ const TABAN = {
   merkez: { 10: [-42, 42], 11: [42, 42], 12: [42, -42], 13: [-42, -42] },
 };
 const ISLEM_G = 640;            // işlem genişliği (px)
-const BOLGE = 0.6;              // arama çerçevesi: kısa kenarın oranı, ekran ortasında
+const BOLGE = 0.6;              // arama çerçevesi: genişlik ve yüksekliğin oranı, ekran ortasında
 const UZAK = [120, 350];        // kabul edilen kamera-kutu uzaklığı (mm)
 const OLCUM_KARE = 300;         // Ölç modu kare sayısı
 
@@ -256,8 +256,9 @@ function koseSirala(pts) {
 }
 
 function aramaBolgesi(w, h) {
-  const a = Math.round(Math.min(w, h) * BOLGE);
-  return { x: Math.round((w - a) / 2), y: Math.round((h - a) / 2), w: a, h: a };
+  // her iki yönde ortadaki %60 (dikey telefonda kare çerçeve çok dardı: gerçek karede kutu dışında kaldı)
+  const bw = Math.round(w * BOLGE), bh = Math.round(h * BOLGE);
+  return { x: Math.round((w - bw) / 2), y: Math.round((h - bh) / 2), w: bw, h: bh };
 }
 
 function kutuBulBolge(src, b = aramaBolgesi(src.cols, src.rows)) {
@@ -340,9 +341,12 @@ function kenarMedyan(gri) {
 }
 
 // eşik: kilitliyken neredeyse donuk (histerezis), DOM'a seyrek yazılır
+// Gerçek ölçüm (test/veri/gercek_01): kağıt 214, kapak 86 (%40), duvar 79 (%37), gölge çekirdeği ~129 (%60).
+// %80 eşik gölgeyi kutuya katıyordu; %50 kutuyu alır, gölgeyi dışarıda bırakır.
+const ESIK_ORAN = 0.5;
 let esikDurum = null, esikYazildi = 0;
 function esikSec(gri) {
-  const yeni = kenarMedyan(gri) * 0.8;   // metalik kapak kağıda yakın parlayabiliyor
+  const yeni = kenarMedyan(gri) * ESIK_ORAN;
   if (esikDurum === null || !kilit) esikDurum = yeni;
   else if (Math.abs(yeni - esikDurum) > 3) esikDurum = 0.95 * esikDurum + 0.05 * yeni;
   const t = Math.round(esikDurum), simdi = performance.now();
@@ -406,7 +410,7 @@ function kutuBul(src, alan) {
         c.delete(); continue;
       }
       // kapak çıkık: siyah duvar halkası alanın ~%46'sı; adayda yeterince gerçekten siyah piksel olmalı
-      const siyah = siyahOrani(gri, c, t / 0.8);
+      const siyah = siyahOrani(gri, c, t / ESIK_ORAN);
       teshis.siyahOrani = +siyah.toFixed(2);
       if (siyah < KUTU_SIYAH_ORAN) { reddedilen.push(`siyah az %${Math.round(siyah * 100)} (gölge?)`); if (yedek === null) yedek = i; c.delete(); continue; }
       const yak = new cv.Mat();
@@ -483,14 +487,81 @@ function siyahOrani(gri, c, kagit) {
   const m = cv.Mat.zeros(gri.rows, gri.cols, cv.CV_8U), mv = new cv.MatVector();
   try {
     mv.push_back(c); cv.drawContours(m, mv, 0, new cv.Scalar(255), cv.FILLED);
-    const esik = kagit * 0.4, g = gri.data, md = m.data;
+    const esik = kagit * ESIK_ORAN, g = gri.data, md = m.data;
     let n = 0, koyu = 0;
     for (let i = 0; i < g.length; i++) if (md[i]) { n++; if (g[i] < esik) koyu++; }
     return n ? koyu / n : 0;
   } finally { m.delete(); mv.delete(); }
 }
 
+function ustYuzBulDoku(gri, c, silAlan) {
+  // hız: doku hesabını tüm arama bölgesinde değil, adayın sınır kutusunda yap (gerçek ölçüm: 26 ms -> birkaç ms)
+  const r = cv.boundingRect(c), p = 8;
+  const x0 = Math.max(0, r.x - p), y0 = Math.max(0, r.y - p), x1 = Math.min(gri.cols, r.x + r.width + p), y1 = Math.min(gri.rows, r.y + r.height + p);
+  const parca = gri.roi(new cv.Rect(x0, y0, x1 - x0, y1 - y0)), d = c.data32S, kaydir = new Int32Array(d.length);
+  for (let i = 0; i < d.length; i += 2) { kaydir[i] = d[i] - x0; kaydir[i + 1] = d[i + 1] - y0; }
+  const ck = cv.matFromArray(d.length / 2, 1, cv.CV_32SC2, Array.from(kaydir));
+  try {
+    const k = ustYuzBulDokuIc(parca, ck, silAlan);
+    return k && k.map((q) => ({ x: q.x + x0, y: q.y + y0 }));
+  } finally { parca.delete(); ck.delete(); }
+}
+
+function ustYuzBulDokuIc(gri, c, silAlan) {
+  // kapak ile duvar tonca aynı olabiliyor (86 vs 79) ama doku farklı: 9x9 yerel std, silüet içinde Otsu
+  const sil = cv.Mat.zeros(gri.rows, gri.cols, cv.CV_8U), mv = new cv.MatVector();
+  const f = new cv.Mat(), m1 = new cv.Mat(), m2 = new cv.Mat(), f2 = new cv.Mat(), ik = new cv.Mat(), kont = new cv.MatVector(), hiy = new cv.Mat(), yak = new cv.Mat();
+  try {
+    mv.push_back(c); cv.drawContours(sil, mv, 0, new cv.Scalar(255), cv.FILLED);
+    const k5 = cv.getStructuringElement(cv.MORPH_RECT, new cv.Size(5, 5)), silTam = sil.clone();
+    cv.erode(sil, sil, k5, new cv.Point(-1, -1), 2);   // kenardaki ton geçişi (yüksek std) histograma girmesin
+    gri.convertTo(f, cv.CV_32F);
+    cv.blur(f, m1, new cv.Size(9, 9)); cv.multiply(f, f, f2); cv.blur(f2, m2, new cv.Size(9, 9));
+    const n = gri.rows * gri.cols, std = new Float32Array(n), md = sil.data, a = m1.data32F, b = m2.data32F;
+    const hist = new Array(256).fill(0); let say = 0;
+    for (let i = 0; i < n; i++) { std[i] = Math.sqrt(Math.max(0, b[i] - a[i] * a[i])); if (md[i]) { hist[Math.min(255, Math.round(std[i] * 8))]++; say++; } }
+    if (say < 200) { k5.delete(); silTam.delete(); return null; }
+    // Otsu (std*8 kutularında)
+    let top = 0; for (let i = 0; i < 256; i++) top += i * hist[i];
+    let wB = 0, sB = 0, enV = -1, t = 0, o0 = 0, o1 = 0;
+    for (let i = 0; i < 256; i++) {
+      wB += hist[i]; if (!wB) continue; const wF = say - wB; if (!wF) break; sB += i * hist[i];
+      const mB = sB / wB, mF = (top - sB) / wF, v = wB * wF * (mB - mF) ** 2; if (v > enV) { enV = v; t = i; o0 = mB / 8; o1 = mF / 8; }
+    }
+    teshis.doku = { esik: +(t / 8).toFixed(2), duzOrt: +o0.toFixed(2), dokuluOrt: +o1.toFixed(2) };
+    if (o1 < 2 * o0 + 1) { teshis.doku.red = "doku farkı yok"; k5.delete(); silTam.delete(); return null; }
+    ik.create(gri.rows, gri.cols, cv.CV_8U);
+    for (let i = 0; i < n; i++) ik.data[i] = md[i] && std[i] * 8 > t ? 255 : 0;
+    // kapama: kapaktaki düz lekeleri doldur. Açma (kutu boyuyla ölçekli): kutunun dikey kenarlarındaki
+    // ton geçişi de "dokulu" görünür ve kapağa ince bacaklar gibi yapışır (gerçek karede 6 köşe) -> sil
+    const k9 = cv.getStructuringElement(cv.MORPH_RECT, new cv.Size(9, 9));
+    const ac = Math.max(9, Math.round(Math.sqrt(silAlan) * 0.12) | 1), kAc = cv.getStructuringElement(cv.MORPH_RECT, new cv.Size(ac, ac));
+    cv.morphologyEx(ik, ik, cv.MORPH_CLOSE, k9); cv.morphologyEx(ik, ik, cv.MORPH_OPEN, kAc);
+    cv.dilate(ik, ik, k5, new cv.Point(-1, -1), 2); cv.bitwise_and(ik, silTam, ik);   // aşındırmayı geri al
+    k9.delete(); kAc.delete(); k5.delete(); silTam.delete();
+    if (tekKare) { maske2C.width = ik.cols; maske2C.height = ik.rows; cv.imshow(maske2C, ik); }
+    cv.findContours(ik, kont, hiy, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_NONE);
+    const [enIyi, enAlan] = enBuyukKontur(kont, silAlan * 0.25);
+    if (enIyi < 0) { teshis.doku.red = "dokulu bölge küçük"; return null; }
+    const ck = kont.get(enIyi);
+    cv.approxPolyDP(ck, yak, 0.04 * cv.arcLength(ck, true), true);
+    const ckData = ck.data32S.slice(); ck.delete();
+    teshis.doku.alan = enAlan; teshis.doku.koseSayi = yak.rows;
+    if (yak.rows !== 4 || !cv.isContourConvex(yak)) { teshis.doku.red = `${yak.rows} köşe`; return null; }
+    const pts = []; for (let i = 0; i < 4; i++) pts.push({ x: yak.data32S[i * 2], y: yak.data32S[i * 2 + 1] });
+    return koseIncelt(ckData, pts);
+  } finally { [sil, mv, f, m1, m2, f2, ik, kont, hiy, yak].forEach((m) => m.delete()); }
+}
+
 function ustYuzBul(gri, c, silAlan) {
+  // önce doku (gerçek karede çalışan), olmazsa ton (metalik kapak parlaksa)
+  const d = ustYuzBulDoku(gri, c, silAlan);
+  if (d) { teshis.kapakYontem = "doku"; return d; }
+  teshis.kapakYontem = "ton";
+  return ustYuzBulTon(gri, c, silAlan);
+}
+
+function ustYuzBulTon(gri, c, silAlan) {
   // silüet maskesi içinde Otsu: koyu sınıf = siyah duvarlar, açık sınıf = metalik gri kapak
   const sil = cv.Mat.zeros(gri.rows, gri.cols, cv.CV_8U), acik = new cv.Mat();
   const mv = new cv.MatVector(), kont = new cv.MatVector(), hiy = new cv.Mat(), yak = new cv.Mat();
