@@ -4,7 +4,7 @@
 // Ölçüm her zaman HAM pozdan; 1€ filtresi yalnız çizimde. "Ölç" modu sabit telefonda titremeyi sayıyla verir.
 // Geometri: ../asama0/v2/geometri.json (kutu), ../asama0/v3/geometri_v3.json (taban). mm, iç taban z=0, +z kameraya.
 
-const SURUM = "v1.3";   // her yayında artır; ekranda görünür (doğru sürüm mü kontrolü)
+const SURUM = "v1.5";   // her yayında artır; ekranda görünür (doğru sürüm mü kontrolü)
 
 const G = {
   dis: 30,            // kutu dış kenar (kapak da 30)
@@ -106,9 +106,11 @@ function hareketAl() {
 }
 
 // --- kamera ayar kilidi: odak + pozlama + beyaz dengesi (titremenin bir kaynağı otomatik ayarların oynaması) ---
-let kameraKilitlendi = false;
-$("kameraKilit").onclick = () => kameraKilitle();
-async function kameraKilitle() {
+// Otomatik kilit yalnız odak + beyaz dengesi. Pozlama yalnız elle ve kontrollü: Android Chrome'da
+// exposureMode "manual" mevcut süreyle bile karanlığa düşebiliyor -> görüntü %30+ kararırsa geri al.
+let kameraKilitlendi = false, pozlamaKontrol = null, sonParlaklik = null;
+$("kameraKilit").onclick = () => kameraKilitle(true);
+async function kameraKilitle(pozlamaDa) {
   kameraKilitlendi = true;
   const iz = akis && akis.getVideoTracks()[0];
   if (!iz) return;
@@ -120,8 +122,11 @@ async function kameraKilitle() {
   if ((yet.focusMode || []).includes("manual")) await dene("odak", { focusMode: "manual", ...(ayar.focusDistance != null ? { focusDistance: ayar.focusDistance } : {}) });
   else if ((yet.focusMode || []).includes("single-shot")) await dene("odak(tek)", { focusMode: "single-shot" });
   else sonuc.push("odak yok");
-  if ((yet.exposureMode || []).includes("manual")) await dene("pozlama", { exposureMode: "manual", ...(ayar.exposureTime != null ? { exposureTime: ayar.exposureTime } : {}) });
-  else sonuc.push("pozlama yok");
+  if (!pozlamaDa) sonuc.push("pozlama otomatik");
+  else if ((yet.exposureMode || []).includes("manual") && ayar.exposureTime != null) {
+    await dene("pozlama", { exposureMode: "manual", exposureTime: ayar.exposureTime });
+    pozlamaKontrol = { once: sonParlaklik, zaman: performance.now() };
+  } else sonuc.push("pozlama yok");
   if ((yet.whiteBalanceMode || []).includes("manual")) await dene("beyaz denge", { whiteBalanceMode: "manual", ...(ayar.colorTemperature != null ? { colorTemperature: ayar.colorTemperature } : {}) });
   else sonuc.push("beyaz denge yok");
   $("kameraKilit").classList.add("aktif");
@@ -323,7 +328,7 @@ function kutuBul(src, alan) {
     cv.morphologyEx(ikili, ikili, cv.MORPH_CLOSE, k); k.delete();
     if (maskeCiz()) cv.imshow(maskeC, ikili);
     cv.findContours(ikili, kont, hiy, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_NONE);
-    let enIyi = -1, enAlan = alan[0], reddedilen = [];
+    const adaylar = [], reddedilen = [];
     for (let i = 0; i < kont.size(); i++) {
       const c = kont.get(i), a = cv.contourArea(c);
       const r = cv.boundingRect(c); c.delete();
@@ -332,16 +337,39 @@ function kutuBul(src, alan) {
       if (kenaraDegiyor) { reddedilen.push("çerçeveye değiyor"); continue; }
       if (a > alan[1]) { reddedilen.push("çok büyük/yakın"); continue; }
       if (a < alan[0]) { if (a > alan[0] * 0.3) reddedilen.push("çok küçük/uzak"); continue; }
-      if (a > enAlan) { enAlan = a; enIyi = i; }
+      adaylar.push([i, a]);
     }
-    teshis.reddedilen = reddedilen;
-    if (enIyi >= 0) {
-      const c = kont.get(enIyi), yak = new cv.Mat();
-      const silAlan = enAlan;
+    // gölge reddi: kutu İKİ tonlu (gri kapak + siyah duvar), gölge tek tonlu ve siyaha inmez.
+    // En büyük birkaç adayı sırayla dene, doğrulamayı geçen ilkini al.
+    adaylar.sort((x, y) => y[1] - x[1]);
+    for (const [i, silAlan] of adaylar.slice(0, 4)) {
+      const c = kont.get(i);
       teshis.silAlan = silAlan; teshis.silKont = c.data32S.length / 2;
-      // önce gri kapağı ara: silüet içinde siyah duvardan açık kalan bölge = üst yüz
-      const ust = kapakTakili ? ustYuzBul(gri, c, silAlan) : null;
-      if (ust) { yak.delete(); const kd = c.data32S.slice(); c.delete(); return { kose: koseSirala(ust), yontem: "gri kapak", kont: kd }; }
+      if (kapakTakili) {
+        // kapak takılı: içinde gri kapak bulunamayan aday kutu değildir (silüete geri dönüş yok)
+        const ust = ustYuzBul(gri, c, silAlan);
+        if (ust) { const kd = c.data32S.slice(); c.delete(); teshis.reddedilen = reddedilen; return { kose: koseSirala(ust), yontem: "gri kapak", kont: kd }; }
+        // tam tepeden bakışta yalnız kapak görünür (kapak = kutu dış ölçüsü) -> tek ton. O zaman gölgeden
+        // ayıran: düzgün kare biçim + KESKİN kenar (gölge kenarı yumuşak, 5-15 px'e yayılır)
+        if (teshis.kapak && teshis.kapak.tekTon) {
+          const kare = kareMi(c), keskin = kenarKeskinligi(gri, c);
+          teshis.tekTon = { kare, keskin: +keskin.toFixed(2) };
+          if (kare && keskin > KENAR_KESKIN_MIN) {
+            const yak = new cv.Mat(); cv.approxPolyDP(c, yak, 0.04 * cv.arcLength(c, true), true);
+            let pts = []; for (let j = 0; j < 4; j++) pts.push({ x: yak.data32S[j * 2], y: yak.data32S[j * 2 + 1] });
+            pts = koseIncelt(c.data32S, pts); yak.delete();
+            const kd = c.data32S.slice(); c.delete(); teshis.reddedilen = reddedilen;
+            return { kose: koseSirala(pts), yontem: "gri kapak", kont: kd };
+          }
+          reddedilen.push(kare ? `kenar yumuşak ${keskin.toFixed(2)} (gölge?)` : "kare değil (gölge?)");
+        } else reddedilen.push("gri kapak yok (gölge?)");
+        c.delete(); continue;
+      }
+      // kapak çıkık: siyah duvar halkası alanın ~%46'sı; adayda yeterince gerçekten siyah piksel olmalı
+      const siyah = siyahOrani(gri, c, t / 0.8);
+      teshis.siyahOrani = +siyah.toFixed(2);
+      if (siyah < KUTU_SIYAH_ORAN) { reddedilen.push(`siyah az %${Math.round(siyah * 100)} (gölge?)`); c.delete(); continue; }
+      const yak = new cv.Mat();
       cv.approxPolyDP(c, yak, 0.04 * cv.arcLength(c, true), true);
       let pts = [], yontem;
       if (yak.rows === 4 && cv.isContourConvex(yak)) {
@@ -356,9 +384,60 @@ function kutuBul(src, alan) {
       yak.delete();
       sonuc = { kose: koseSirala(pts), yontem: "silüet, " + yontem, kont: c.data32S.slice() };
       c.delete();
+      break;
     }
+    teshis.reddedilen = reddedilen;
   } finally { gri.delete(); ikili.delete(); kont.delete(); hiy.delete(); }
   return sonuc;
+}
+
+const KENAR_KESKIN_MIN = 0.22;  // kenardaki en büyük adım / ton farkı; sentetik: keskin kutu 0.30, yumuşak gölge 0.12-0.13 (gerçekte kayıtlardan ayarlanacak)
+function kareMi(c) {
+  // 4 köşeli, dışbükey, en-boy ~1, dolu (gölgeler genelde düzensiz ya da telefon gibi uzun)
+  const yak = new cv.Mat(), hull = new cv.Mat();
+  try {
+    cv.approxPolyDP(c, yak, 0.04 * cv.arcLength(c, true), true);
+    if (yak.rows !== 4 || !cv.isContourConvex(yak)) return false;
+    const r = cv.minAreaRect(c), en = Math.max(r.size.width, r.size.height) / Math.max(1, Math.min(r.size.width, r.size.height));
+    cv.convexHull(c, hull);
+    const dolu = cv.contourArea(c) / Math.max(1, cv.contourArea(hull));
+    return en < 1.35 && dolu > 0.93;
+  } finally { yak.delete(); hull.delete(); }
+}
+function kenarKeskinligi(gri, c) {
+  // kontur boyunca, normal yönünde ±6 px profil: en büyük komşu farkı / toplam ton farkı
+  const d = c.data32S, w = gri.cols, h = gri.rows, g = gri.data, n = d.length / 2, sonuc = [];
+  const adim = Math.max(1, Math.floor(n / 60));
+  for (let i = 0; i < n; i += adim) {
+    const a = (i - 3 + n) % n, b = (i + 3) % n;
+    let tx = d[2 * b] - d[2 * a], ty = d[2 * b + 1] - d[2 * a + 1];
+    const L = Math.hypot(tx, ty); if (L < 1) continue;
+    const nx = -ty / L, ny = tx / L, x0 = d[2 * i], y0 = d[2 * i + 1], prof = [];
+    for (let k = -6; k <= 6; k++) {
+      const x = Math.round(x0 + nx * k), y = Math.round(y0 + ny * k);
+      if (x < 0 || y < 0 || x >= w || y >= h) { prof.length = 0; break; }
+      prof.push(g[y * w + x]);
+    }
+    if (prof.length < 13) continue;
+    const ton = Math.abs(prof[12] - prof[0]); if (ton < 20) continue;
+    let enBuyuk = 0; for (let k = 1; k < 13; k++) enBuyuk = Math.max(enBuyuk, Math.abs(prof[k] - prof[k - 1]));
+    sonuc.push(enBuyuk / ton);
+  }
+  if (sonuc.length < 8) return 0;
+  sonuc.sort((x, y) => x - y);
+  return sonuc[sonuc.length >> 1];   // medyan
+}
+const KUTU_SIYAH_ORAN = 0.15;   // kapak çıkıkken adayda en az bu oranda "gerçekten siyah" piksel
+function siyahOrani(gri, c, kagit) {
+  // aday içindeki piksellerin ne kadarı kağıdın %40'ından koyu (mat siyah PLA ~20-50, gölge ~100-170)
+  const m = cv.Mat.zeros(gri.rows, gri.cols, cv.CV_8U), mv = new cv.MatVector();
+  try {
+    mv.push_back(c); cv.drawContours(m, mv, 0, new cv.Scalar(255), cv.FILLED);
+    const esik = kagit * 0.4, g = gri.data, md = m.data;
+    let n = 0, koyu = 0;
+    for (let i = 0; i < g.length; i++) if (md[i]) { n++; if (g[i] < esik) koyu++; }
+    return n ? koyu / n : 0;
+  } finally { m.delete(); mv.delete(); }
 }
 
 function ustYuzBul(gri, c, silAlan) {
@@ -385,7 +464,7 @@ function ustYuzBul(gri, c, silAlan) {
       if (v > enIyiV) { enIyiV = v; t2 = i; m0 = mB; m1 = mF; }
     }
     teshis.kapak = { esik2: t2, koyuOrt: +m0.toFixed(1), acikOrt: +m1.toFixed(1), n };
-    if (m1 - m0 < 25) { k.delete(); silTam.delete(); return null; }   // kapak ile duvar ayrışmıyor
+    if (m1 - m0 < 25) { teshis.kapak.tekTon = true; k.delete(); silTam.delete(); return null; }   // tek ton: ya tam tepeden kapak ya gölge
     cv.threshold(gri, acik, t2, 255, cv.THRESH_BINARY);
     cv.bitwise_and(acik, sil, acik);
     cv.morphologyEx(acik, acik, cv.MORPH_CLOSE, k);
@@ -882,7 +961,7 @@ function otoPilot(simdi, kt, markerler, arucoPoz) {
   const sabit = oto.iz.length === OTO.sabitKare && Math.hypot(sd(oto.iz.map((p) => p.x)), sd(oto.iz.map((p) => p.y))) < OTO.sabitPx;
   // kamera kilidi: poz ilk oturduktan biraz sonra, bir kez
   if (kt && oto.pozIlk === null) oto.pozIlk = simdi;
-  if (!kameraKilitlendi && oto.pozIlk !== null && simdi - oto.pozIlk > OTO.kilitGecikmeMs) kameraKilitle();
+  if (!kameraKilitlendi && oto.pozIlk !== null && simdi - oto.pozIlk > OTO.kilitGecikmeMs) kameraKilitle(false);
   // ölçüm: sabitken başlat, oynarsa iptal
   if (!olcum && sabit && simdi - oto.sonOlcum > OTO.olcumAraMs) { olcumBaslat("oto"); oto.olcumBas = kt; }
   if (olcum && olcum.neden === "oto" && kt && oto.olcumBas && Math.hypot(kt.x - oto.olcumBas.x, kt.y - oto.olcumBas.y) > OTO.olcumKaymaPx) {
@@ -932,6 +1011,15 @@ function dongu(meta) {
   try {
     cv.cvtColor(src, gri, cv.COLOR_RGBA2GRAY);
     goruntuKalitesi(gri, kayit);
+    sonParlaklik = kayit.parlaklik;
+    if (pozlamaKontrol && performance.now() - pozlamaKontrol.zaman > 800) {
+      const k = pozlamaKontrol; pozlamaKontrol = null;
+      if (k.once && kayit.parlaklik < 0.7 * k.once) {
+        akis.getVideoTracks()[0].applyConstraints({ advanced: [{ exposureMode: "continuous" }] }).catch(() => {});
+        $("kameraKilit").textContent += " · pozlama karardı, otomatiğe döndü";
+        olayLog("pozlama-geri", { once: k.once, sonra: kayit.parlaklik });
+      }
+    }
     asama.hazirlik = performance.now() - t0; t0 = performance.now();
     let anaPoz = null;   // kırmızı küp ölçümü ve kalibrasyon bilgisi için öncelikli poz (aruco > markersız)
     let markerler = [], arucoPozu = null;
