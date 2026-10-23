@@ -52,6 +52,7 @@
   <div id="durum">OpenCV yükleniyor…</div>
   <details>
     <summary>Kalibrasyon (taban plakasıyla)</summary>
+    <p style="margin:8px 0 0;font-size:13px">Marker sayfası: <a style="color:var(--vurgu)" href="../asama0/v3/marker_sayfasi.html" target="_blank">yazdır (%100, ölçeksiz)</a> · cetvel 100 mm değilse kullanma</p>
     <div class="satir" style="margin-top:8px">
       <button id="kalibEkle">Kalib: görüntü ekle (0)</button>
       <button id="kalibHesapla">Hesapla</button>
@@ -72,7 +73,7 @@
     <label>Görüş açısı° <input id="fov" type="range" min="45" max="85" value="65"><span id="fovV">65</span></label>
   </details>
 </div>
-<script src="app.js?v=1.0"></script>
+<script src="app.js?v=1.1"></script>
 <script async src="vendor/opencv.js" onload="cvYuklendi()"></script>
 </body>
 </html>

@@ -1,0 +1,40 @@
+## STL ölçüleri (baskı yönünde)
+| dosya | X x Y x Z (mm) | hacim (cm3) | ~PLA (g, %100 dolu) | üçgen |
+|---|---|---|---|---|
+| 01_taban_SIYAH.stl | 140.0 x 140.0 x 4.4 | 74.17 | 92.0 | 6310 |
+| 02_jig_J0.stl | 21.8 x 21.8 x 5.4 | 1.19 | 1.5 | 4244 |
+| 03_jig_J1.stl | 21.8 x 21.8 x 5.4 | 1.24 | 1.5 | 1414 |
+| 04_jig_J2.stl | 21.8 x 21.8 x 5.4 | 1.22 | 1.5 | 2928 |
+| 05_stand_ayak_x2.stl | 204.0 x 190.0 x 45.0 | 176.88 | 219.3 | 160 |
+| 06_stand_tabla.stl | 182.0 x 100.0 x 11.0 | 93.45 | 115.9 | 2026 |
+
+## Taban plakası
+- sınır kutusu (sözleşme koord.): x -70.00..70.00, y -70.00..70.00, z -4.50..-0.10 (z üstü = kabartmalar -0.5+0.4)
+- kutu (dış tabanı z=-2.5) yuvada: çakışma 0.0000 mm3 (0 olmalı), yan boşluk 0.3 mm/yan, yuva tabanı z=-2.50
+- kutu 0.1 mm aşağı itilince çakışma 90.0 mm3 (>0 -> yuva tabanı tam z=-2.5'te, kutu oturuyor)
+- kağıt yuvası iç kenarı 19.30 mm, kutu yuvası kenarı 15.30 (+1.0 köşe boşaltması) -> et 3.00 mm (yalnız köşe boşaltma noktasında; düz kenarda 4.00)
+- kağıt yuvası dış kenarı 64.70, plaka kenarı 70.0 (pah sonrası üst kenar 69.0) -> et 4.30 mm; cımbız oyuğu r3 -> plaka kenarına 1.30 mm
+- kağıt yuvaları arası (x=0 ekseninde) et: 38.6 mm
+- marker yüzeyi z = -0.5 - 0.2 (cep) + 0.1 (kağıt) + 0.05 (yapıştırıcı) = -0.55
+
+## Jig'ler (kutu içinde, küp ile)
+- J0: küp merkezi (+0.0,+0.0,7.5) | jig-kutu çakışma 0.0000, jig-küp 0.0000, küp-kutu 0.0000 mm3 | en yakın: kutuya 0.00, küpe 0.10 mm | boy 21.8x21.8x5.4, hacim 1.18 cm3
+    küpün oyunu (+x,-x,+y,-y) ≈ 0.10, 0.10, 0.10, 0.10 mm (tasarım: jig yönünde 0.1-0.2, kutu duvarına 0)
+- J1: küp merkezi (+3.5,+3.5,7.5) | jig-kutu çakışma 0.0000, jig-küp 0.0000, küp-kutu 0.0000 mm3 | en yakın: kutuya 0.00, küpe 0.10 mm | boy 21.8x21.8x5.4, hacim 1.24 cm3
+    küpün oyunu (+x,-x,+y,-y) ≈ 0.00, 0.10, 0.00, 0.10 mm (tasarım: jig yönünde 0.1-0.2, kutu duvarına 0)
+- J2: küp merkezi (+3.5,+0.0,7.5) | jig-kutu çakışma 0.0000, jig-küp 0.0000, küp-kutu 0.0000 mm3 | en yakın: kutuya 0.00, küpe 0.10 mm | boy 21.8x21.8x5.4, hacim 1.22 cm3
+    küpün oyunu (+x,-x,+y,-y) ≈ 0.00, 0.10, 0.10, 0.10 mm (tasarım: jig yönünde 0.1-0.2, kutu duvarına 0)
+
+## Stand (montaj konumunda)
+- sağ ayak-tabla çakışma: 0.0000 mm3
+- sol ayak-tabla çakışma: 0.0000 mm3
+- sağ ayak-plaka çakışma: 0.0000 mm3
+- sol ayak-plaka çakışma: 0.0000 mm3
+- tabla-kutu çakışma: 0.0000 mm3
+- ayak dili yarıkta: yan boşluk 0.2 mm; ayak-plaka en yakın 10.0 mm
+- tabla üst yüzü z=199.5 -> plaka üst yüzüne 200.0 mm; kapak üstüne (z=26) 167.5 mm boşluk
+- montaj dış ölçüsü: 250 x 100 x 209 mm (masa z=-4.5)
+- kamera penceresi x -12.0..38.0, y -36.0..36.0 (50x72 mm); telefon kanalı 80.0 mm, kamera ucu durağı x=40.0
+- görüş (varsayım 26 mm eşdeğer, HFOV 67°, VFOV 53°, lens markerlerden 199 mm): pencere köşesindeki en kötü lens konumunda markerlerin FOV doluluğu 92% (<100 = 4 marker görünür)
+
+geometri_v3.json yazıldı

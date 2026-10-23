@@ -1,0 +1,95 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="210mm" height="297mm" viewBox="0 0 210 297">
+<rect width="210" height="297" fill="#fff"/>
+<text x="105" y="12" font-family="Arial, Helvetica, sans-serif" font-size="4.5" text-anchor="middle" font-weight="bold">AR cerrahi - Aşama 0 v3 taban işaretçileri (DICT_4X4_50, 35 mm, kâğıt 45 mm)</text>
+<text x="105" y="18" font-family="Arial, Helvetica, sans-serif" font-size="3.2" text-anchor="middle">Baskıda %100 / gerçek boyut, ölçeklendirme KAPALI. Aşağıdaki cetvel 100 mm değilse KULLANMA. Gri çizgiden kes; ok (+y) plakadaki oka baksın.</text>
+<g id="m10">
+<rect x="50" y="24" width="45" height="45" fill="#fff" stroke="#9a9a9a" stroke-width="0.1"/>
+<rect x="55" y="29" width="35" height="35" fill="#000"/>
+<path d="M60.8333 34.8333h5.8333v5.8333h-5.8333zM66.6667 34.8333h5.8333v5.8333h-5.8333zM72.5 34.8333h5.8333v5.8333h-5.8333zM78.3333 34.8333h5.8333v5.8333h-5.8333zM60.8333 40.6667h5.8333v5.8333h-5.8333zM78.3333 40.6667h5.8333v5.8333h-5.8333zM60.8333 46.5h5.8333v5.8333h-5.8333zM78.3333 46.5h5.8333v5.8333h-5.8333zM78.3333 52.3333h5.8333v5.8333h-5.8333z" fill="#fff" shape-rendering="crispEdges"/>
+<text x="72.5" y="25.7" font-family="Arial, Helvetica, sans-serif" font-size="1.6" fill="#c8c8c8" text-anchor="middle">↑ +y  id10</text>
+<text x="52" y="75" font-family="Arial, Helvetica, sans-serif" font-size="4.2" fill="#000">id 10</text>
+<path d="M86 75.5v-5.5m-2 2l2-2.6l2 2.6" fill="none" stroke="#000" stroke-width="0.45"/>
+<text x="88.5" y="75" font-family="Arial, Helvetica, sans-serif" font-size="4.2" fill="#000">+y</text>
+</g>
+<g id="m11">
+<rect x="115" y="24" width="45" height="45" fill="#fff" stroke="#9a9a9a" stroke-width="0.1"/>
+<rect x="120" y="29" width="35" height="35" fill="#000"/>
+<path d="M143.3333 34.8333h5.8333v5.8333h-5.8333zM143.3333 40.6667h5.8333v5.8333h-5.8333zM125.8333 46.5h5.8333v5.8333h-5.8333zM137.5 46.5h5.8333v5.8333h-5.8333zM131.6667 52.3333h5.8333v5.8333h-5.8333zM137.5 52.3333h5.8333v5.8333h-5.8333zM143.3333 52.3333h5.8333v5.8333h-5.8333z" fill="#fff" shape-rendering="crispEdges"/>
+<text x="137.5" y="25.7" font-family="Arial, Helvetica, sans-serif" font-size="1.6" fill="#c8c8c8" text-anchor="middle">↑ +y  id11</text>
+<text x="117" y="75" font-family="Arial, Helvetica, sans-serif" font-size="4.2" fill="#000">id 11</text>
+<path d="M151 75.5v-5.5m-2 2l2-2.6l2 2.6" fill="none" stroke="#000" stroke-width="0.45"/>
+<text x="153.5" y="75" font-family="Arial, Helvetica, sans-serif" font-size="4.2" fill="#000">+y</text>
+</g>
+<g id="m13">
+<rect x="50" y="81" width="45" height="45" fill="#fff" stroke="#9a9a9a" stroke-width="0.1"/>
+<rect x="55" y="86" width="35" height="35" fill="#000"/>
+<path d="M72.5 91.8333h5.8333v5.8333h-5.8333zM60.8333 97.6667h5.8333v5.8333h-5.8333zM72.5 97.6667h5.8333v5.8333h-5.8333zM60.8333 109.3333h5.8333v5.8333h-5.8333zM66.6667 109.3333h5.8333v5.8333h-5.8333zM72.5 109.3333h5.8333v5.8333h-5.8333zM78.3333 109.3333h5.8333v5.8333h-5.8333z" fill="#fff" shape-rendering="crispEdges"/>
+<text x="72.5" y="82.7" font-family="Arial, Helvetica, sans-serif" font-size="1.6" fill="#c8c8c8" text-anchor="middle">↑ +y  id13</text>
+<text x="52" y="132" font-family="Arial, Helvetica, sans-serif" font-size="4.2" fill="#000">id 13</text>
+<path d="M86 132.5v-5.5m-2 2l2-2.6l2 2.6" fill="none" stroke="#000" stroke-width="0.45"/>
+<text x="88.5" y="132" font-family="Arial, Helvetica, sans-serif" font-size="4.2" fill="#000">+y</text>
+</g>
+<g id="m12">
+<rect x="115" y="81" width="45" height="45" fill="#fff" stroke="#9a9a9a" stroke-width="0.1"/>
+<rect x="120" y="86" width="35" height="35" fill="#000"/>
+<path d="M125.8333 97.6667h5.8333v5.8333h-5.8333zM131.6667 97.6667h5.8333v5.8333h-5.8333zM137.5 97.6667h5.8333v5.8333h-5.8333zM125.8333 103.5h5.8333v5.8333h-5.8333zM137.5 103.5h5.8333v5.8333h-5.8333zM143.3333 103.5h5.8333v5.8333h-5.8333zM131.6667 109.3333h5.8333v5.8333h-5.8333zM137.5 109.3333h5.8333v5.8333h-5.8333zM143.3333 109.3333h5.8333v5.8333h-5.8333z" fill="#fff" shape-rendering="crispEdges"/>
+<text x="137.5" y="82.7" font-family="Arial, Helvetica, sans-serif" font-size="1.6" fill="#c8c8c8" text-anchor="middle">↑ +y  id12</text>
+<text x="117" y="132" font-family="Arial, Helvetica, sans-serif" font-size="4.2" fill="#000">id 12</text>
+<path d="M151 132.5v-5.5m-2 2l2-2.6l2 2.6" fill="none" stroke="#000" stroke-width="0.45"/>
+<text x="153.5" y="132" font-family="Arial, Helvetica, sans-serif" font-size="4.2" fill="#000">+y</text>
+</g>
+<line x1="10" y1="140" x2="200" y2="140" stroke="#ddd" stroke-width="0.2" stroke-dasharray="2 2"/>
+<g id="m10b">
+<rect x="50" y="144" width="45" height="45" fill="#fff" stroke="#9a9a9a" stroke-width="0.1"/>
+<rect x="55" y="149" width="35" height="35" fill="#000"/>
+<path d="M60.8333 154.8333h5.8333v5.8333h-5.8333zM66.6667 154.8333h5.8333v5.8333h-5.8333zM72.5 154.8333h5.8333v5.8333h-5.8333zM78.3333 154.8333h5.8333v5.8333h-5.8333zM60.8333 160.6667h5.8333v5.8333h-5.8333zM78.3333 160.6667h5.8333v5.8333h-5.8333zM60.8333 166.5h5.8333v5.8333h-5.8333zM78.3333 166.5h5.8333v5.8333h-5.8333zM78.3333 172.3333h5.8333v5.8333h-5.8333z" fill="#fff" shape-rendering="crispEdges"/>
+<text x="72.5" y="145.7" font-family="Arial, Helvetica, sans-serif" font-size="1.6" fill="#c8c8c8" text-anchor="middle">↑ +y  id10</text>
+<text x="52" y="195" font-family="Arial, Helvetica, sans-serif" font-size="4.2" fill="#000">id 10 (yedek)</text>
+<path d="M86 195.5v-5.5m-2 2l2-2.6l2 2.6" fill="none" stroke="#000" stroke-width="0.45"/>
+<text x="88.5" y="195" font-family="Arial, Helvetica, sans-serif" font-size="4.2" fill="#000">+y</text>
+</g>
+<g id="m11b">
+<rect x="115" y="144" width="45" height="45" fill="#fff" stroke="#9a9a9a" stroke-width="0.1"/>
+<rect x="120" y="149" width="35" height="35" fill="#000"/>
+<path d="M143.3333 154.8333h5.8333v5.8333h-5.8333zM143.3333 160.6667h5.8333v5.8333h-5.8333zM125.8333 166.5h5.8333v5.8333h-5.8333zM137.5 166.5h5.8333v5.8333h-5.8333zM131.6667 172.3333h5.8333v5.8333h-5.8333zM137.5 172.3333h5.8333v5.8333h-5.8333zM143.3333 172.3333h5.8333v5.8333h-5.8333z" fill="#fff" shape-rendering="crispEdges"/>
+<text x="137.5" y="145.7" font-family="Arial, Helvetica, sans-serif" font-size="1.6" fill="#c8c8c8" text-anchor="middle">↑ +y  id11</text>
+<text x="117" y="195" font-family="Arial, Helvetica, sans-serif" font-size="4.2" fill="#000">id 11 (yedek)</text>
+<path d="M151 195.5v-5.5m-2 2l2-2.6l2 2.6" fill="none" stroke="#000" stroke-width="0.45"/>
+<text x="153.5" y="195" font-family="Arial, Helvetica, sans-serif" font-size="4.2" fill="#000">+y</text>
+</g>
+<g id="m13b">
+<rect x="50" y="201" width="45" height="45" fill="#fff" stroke="#9a9a9a" stroke-width="0.1"/>
+<rect x="55" y="206" width="35" height="35" fill="#000"/>
+<path d="M72.5 211.8333h5.8333v5.8333h-5.8333zM60.8333 217.6667h5.8333v5.8333h-5.8333zM72.5 217.6667h5.8333v5.8333h-5.8333zM60.8333 229.3333h5.8333v5.8333h-5.8333zM66.6667 229.3333h5.8333v5.8333h-5.8333zM72.5 229.3333h5.8333v5.8333h-5.8333zM78.3333 229.3333h5.8333v5.8333h-5.8333z" fill="#fff" shape-rendering="crispEdges"/>
+<text x="72.5" y="202.7" font-family="Arial, Helvetica, sans-serif" font-size="1.6" fill="#c8c8c8" text-anchor="middle">↑ +y  id13</text>
+<text x="52" y="252" font-family="Arial, Helvetica, sans-serif" font-size="4.2" fill="#000">id 13 (yedek)</text>
+<path d="M86 252.5v-5.5m-2 2l2-2.6l2 2.6" fill="none" stroke="#000" stroke-width="0.45"/>
+<text x="88.5" y="252" font-family="Arial, Helvetica, sans-serif" font-size="4.2" fill="#000">+y</text>
+</g>
+<g id="m12b">
+<rect x="115" y="201" width="45" height="45" fill="#fff" stroke="#9a9a9a" stroke-width="0.1"/>
+<rect x="120" y="206" width="35" height="35" fill="#000"/>
+<path d="M125.8333 217.6667h5.8333v5.8333h-5.8333zM131.6667 217.6667h5.8333v5.8333h-5.8333zM137.5 217.6667h5.8333v5.8333h-5.8333zM125.8333 223.5h5.8333v5.8333h-5.8333zM137.5 223.5h5.8333v5.8333h-5.8333zM143.3333 223.5h5.8333v5.8333h-5.8333zM131.6667 229.3333h5.8333v5.8333h-5.8333zM137.5 229.3333h5.8333v5.8333h-5.8333zM143.3333 229.3333h5.8333v5.8333h-5.8333z" fill="#fff" shape-rendering="crispEdges"/>
+<text x="137.5" y="202.7" font-family="Arial, Helvetica, sans-serif" font-size="1.6" fill="#c8c8c8" text-anchor="middle">↑ +y  id12</text>
+<text x="117" y="252" font-family="Arial, Helvetica, sans-serif" font-size="4.2" fill="#000">id 12 (yedek)</text>
+<path d="M151 252.5v-5.5m-2 2l2-2.6l2 2.6" fill="none" stroke="#000" stroke-width="0.45"/>
+<text x="153.5" y="252" font-family="Arial, Helvetica, sans-serif" font-size="4.2" fill="#000">+y</text>
+</g>
+<g id="cetvel">
+<rect x="55" y="274" width="100" height="3" fill="#000"/>
+<line x1="55" y1="270" x2="55" y2="274" stroke="#000" stroke-width="0.25"/>
+<line x1="65" y1="272" x2="65" y2="274" stroke="#000" stroke-width="0.25"/>
+<line x1="75" y1="272" x2="75" y2="274" stroke="#000" stroke-width="0.25"/>
+<line x1="85" y1="272" x2="85" y2="274" stroke="#000" stroke-width="0.25"/>
+<line x1="95" y1="272" x2="95" y2="274" stroke="#000" stroke-width="0.25"/>
+<line x1="105" y1="270" x2="105" y2="274" stroke="#000" stroke-width="0.25"/>
+<line x1="115" y1="272" x2="115" y2="274" stroke="#000" stroke-width="0.25"/>
+<line x1="125" y1="272" x2="125" y2="274" stroke="#000" stroke-width="0.25"/>
+<line x1="135" y1="272" x2="135" y2="274" stroke="#000" stroke-width="0.25"/>
+<line x1="145" y1="272" x2="145" y2="274" stroke="#000" stroke-width="0.25"/>
+<line x1="155" y1="270" x2="155" y2="274" stroke="#000" stroke-width="0.25"/>
+<text x="55" y="269" font-family="Arial, Helvetica, sans-serif" font-size="3">0</text>
+<text x="155" y="269" font-family="Arial, Helvetica, sans-serif" font-size="3" text-anchor="end">100 mm</text>
+<text x="105" y="282" font-family="Arial, Helvetica, sans-serif" font-size="3" text-anchor="middle">Cetvel 100 mm olmalı (±0.5). Ayrıca marker siyah karesi 35.0 mm, kesim karesi 45.0 mm olmalı.</text>
+</g>
+</svg>

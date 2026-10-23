@@ -4,7 +4,7 @@
 // Ölçüm her zaman HAM pozdan; 1€ filtresi yalnız çizimde. "Ölç" modu sabit telefonda titremeyi sayıyla verir.
 // Geometri: ../asama0/v2/geometri.json (kutu), ../asama0/v3/geometri_v3.json (taban). mm, iç taban z=0, +z kameraya.
 
-const SURUM = "v1.0";   // her yayında artır; ekranda görünür (doğru sürüm mü kontrolü)
+const SURUM = "v1.1";   // her yayında artır; ekranda görünür (doğru sürüm mü kontrolü)
 
 const G = {
   dis: 30,            // kutu dış kenar (kapak da 30)
@@ -17,7 +17,7 @@ const G = {
 // taban plakası (asama0/v3): marker merkezleri kutu koordinatında, marker üstü +y yönünde
 const TABAN = {
   kenar: 35,          // siyah marker kenarı (mm)
-  z: -0.4,            // marker yüzeyi: plaka üstü -0.5 + kağıt ~0.1
+  z: -0.55,           // marker yüzeyi: plaka üstü -0.5, 0.2 cep, +0.1 kağıt +0.05 yapıştırıcı (geometri_v3.json)
   merkez: { 10: [-42, 42], 11: [42, 42], 12: [42, -42], 13: [-42, -42] },
 };
 const ISLEM_G = 640;            // işlem genişliği (px)
