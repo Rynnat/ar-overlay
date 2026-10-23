@@ -4,7 +4,7 @@
 // Ölçüm her zaman HAM pozdan; 1€ filtresi yalnız çizimde. "Ölç" modu sabit telefonda titremeyi sayıyla verir.
 // Geometri: ../asama0/v2/geometri.json (kutu), ../asama0/v3/geometri_v3.json (taban). mm, iç taban z=0, +z kameraya.
 
-const SURUM = "v1.1";   // her yayında artır; ekranda görünür (doğru sürüm mü kontrolü)
+const SURUM = "v1.2";   // her yayında artır; ekranda görünür (doğru sürüm mü kontrolü)
 
 const G = {
   dis: 30,            // kutu dış kenar (kapak da 30)
@@ -46,6 +46,7 @@ $("surum").textContent = SURUM;
 
 function cvYuklendi() {
   const bitti = () => { cvHazir = true; arucoHazirla(); kalibYukle(); durum("OpenCV hazır. Kamerayı başlat."); };
+  anahtarYukle();
   if (cv.getBuildInformation) bitti(); else cv.onRuntimeInitialized = bitti;
 }
 function durum(t) { $("durum").textContent = t; }
@@ -61,6 +62,7 @@ $("basla").onclick = async () => {
   islemC.width = ISLEM_G; islemC.height = Math.round(ISLEM_G * video.videoHeight / video.videoWidth);
   maskeC.width = islemC.width; maskeC.height = islemC.height;
   $("basla").textContent = "Çalışıyor";
+  oturumBaslat({ surum: SURUM, mod: mod(), kamera: kameraBilgisi(), kalib, fov: +$("fov").value });
   kareBekle();
 };
 // kamera karesi gelince işle (requestVideoFrameCallback); yoksa ekran tazelemesine bağlı
@@ -72,7 +74,10 @@ $("kapak").onclick = (e) => {
   kapakTakili = !kapakTakili;
   e.target.textContent = "Kapak: " + (kapakTakili ? "takılı" : "çıkık");
   e.target.classList.toggle("aktif", kapakTakili);
+  olayLog("kapak", { kapakTakili });
 };
+$("mod").onchange = () => olayLog("mod", { mod: mod() });
+$("anahtarKaydet").onclick = () => { anahtarKaydet($("anahtar").value); $("anahtar").value = ""; };
 $("maskeBtn").onclick = (e) => {
   maskeGoster = !maskeGoster; maskeC.style.display = maskeGoster ? "block" : "none";
   e.target.classList.toggle("aktif", maskeGoster);
@@ -99,6 +104,7 @@ $("kameraKilit").onclick = async () => {
   else sonuc.push("beyaz denge yok");
   $("kameraKilit").classList.add("aktif");
   $("kameraKilit").textContent = "Kilit: " + sonuc.join(", ");
+  olayLog("kamera-kilit", { sonuc, ayar: iz.getSettings ? iz.getSettings() : null });
 };
 function kameraBilgisi() {
   const iz = akis && akis.getVideoTracks()[0];
@@ -130,7 +136,9 @@ async function teshisPaylas() {
   if (maske2C.width) c.drawImage(maske2C, mw, ekran.height, mw, mh);
   c.fillStyle = "#fff"; c.font = `${yazi}px monospace`;
   satirlar.forEach((t, i) => c.fillText(t, 8, ekran.height + mh + 14 + (i + 1) * (yazi + 6)));
-  await paylas(await new Promise((ok) => k.toBlob(ok, "image/png")), "teshis.png");
+  const blob = await new Promise((ok) => k.toBlob(ok, "image/png"));
+  if (kayitDurum.anahtar) { blobYukle("teshis.png", blob); jsonYukle("teshis", { surum: SURUM, mod: mod(), teshis, kapakTakili, kalib }); $("olcum").textContent = "teşhis kayda gönderildi"; }
+  else await paylas(blob, "teshis.png");
 }
 
 // --- küçük 3B yardımcılar (Mat açmadan) ---
@@ -695,6 +703,7 @@ $("kalibHesapla").onclick = () => {
       fStd: Array.from(s1.data64F).slice(0, 2), zaman: new Date().toISOString() };
     try { localStorage.setItem("kalib", JSON.stringify(kalib)); } catch (e) { /* özel pencere: yalnız bu oturum */ }
     kalibYaz();
+    olayLog("kalibrasyon", { kalib, perView: Array.from(pe.data64F) });
   } catch (e) {
     $("kalibDurum").textContent = "kalibrasyon başarısız: " + (typeof e === "number" ? cv.exceptionFromPtr(e).msg : e.message || e);
   } finally { [objV, imgV, K, D, rv, tv, s1, s2, pe].forEach((m) => m.delete()); }
@@ -774,7 +783,8 @@ async function olcumBitir() {
   ].filter(Boolean).join("\n");
   $("olc").textContent = "Ölç (" + OLCUM_KARE + " kare)"; $("olc").classList.remove("aktif");
   const tam = { ozet, kamera: kameraBilgisi(), kalib, kareler: o.kareler };
-  await paylas(new Blob([JSON.stringify(tam)], { type: "application/json" }), `olcum-${SURUM}-${o.mod}-${Date.now()}.json`);
+  if (kayitDurum.anahtar) { jsonYukle("olcum-" + o.mod, tam); $("olcumSonuc").textContent += "\n→ kayda gönderiliyor (ar-overlay-kayit)"; }
+  else await paylas(new Blob([JSON.stringify(tam)], { type: "application/json" }), `olcum-${SURUM}-${o.mod}-${Date.now()}.json`);
 }
 function kareKaydi(poz, anahtar, kose) {
   // ölçüm için HAM poz kaydı (filtresiz)
@@ -886,6 +896,7 @@ function dongu(meta) {
   kayit.ms = performance.now() - simdi;
   islenenKare++;
   olcumKaydet(kayit);
+  kareLog({ mod: m, ms: +kayit.ms.toFixed(1), fps: +fps.toFixed(1), kapakTakili, durum: bilgi, aruco: kayit.aruco, markersiz: kayit.markersiz }, !!olcum);
   if (gri.cols) { if (oncekiGri) oncekiGri.delete(); oncekiGri = gri; } else gri.delete();
   src.delete();
   if (olcumYazi) $("olcum").textContent = olcumYazi; else $("olcum").textContent = "";

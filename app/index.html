@@ -61,6 +61,17 @@
     <div id="kalibDurum"></div>
   </details>
   <details>
+    <summary>Kayıt (otomatik, GitHub)</summary>
+    <p style="margin:8px 0;font-size:13px;line-height:1.5">Bir kerelik: <a style="color:var(--vurgu)" target="_blank"
+      href="https://github.com/settings/personal-access-tokens/new?name=ar-overlay-kayit&description=ar-overlay+otomatik+kay%C4%B1t&target_name=Rynnat&expires_in=90&contents=write">GitHub anahtarı oluştur</a>
+      → Repository access: <b>Only select repositories → ar-overlay-kayit</b> → Permissions: <b>Contents: Read and write</b> → Generate → kopyala, aşağı yapıştır.</p>
+    <div class="satir">
+      <input id="anahtar" type="password" placeholder="github_pat_…" autocomplete="off" style="flex:1;min-width:0;background:#1d232b;color:var(--fg);border:1px solid #2f3842;border-radius:8px;padding:10px">
+      <button id="anahtarKaydet">Kaydet</button>
+    </div>
+    <div id="kayitDurum" style="font-family:ui-monospace,monospace;font-size:12px;color:var(--soluk);margin-top:6px"></div>
+  </details>
+  <details>
     <summary>Ayarlar</summary>
     <div class="satir" style="margin-top:8px">
       <label class="kucuk"><input id="yumusat" type="checkbox" checked> Yumuşat (yalnız çizim)</label>
@@ -73,7 +84,8 @@
     <label>Görüş açısı° <input id="fov" type="range" min="45" max="85" value="65"><span id="fovV">65</span></label>
   </details>
 </div>
-<script src="app.js?v=1.1"></script>
+<script src="kayit.js?v=1.2"></script>
+<script src="app.js?v=1.2"></script>
 <script async src="vendor/opencv.js" onload="cvYuklendi()"></script>
 </body>
 </html>
