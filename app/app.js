@@ -330,6 +330,29 @@ function kutuKoseleri(x0, x1, y0, y1, z0, z1) {
 }
 const KENARLAR = [[0, 1], [1, 2], [2, 3], [3, 0], [4, 5], [5, 6], [6, 7], [7, 4], [0, 4], [1, 5], [2, 6], [3, 7]];
 
+// --- kareler arası takip: kısa kayıplarda son konumu tut, köşeleri yumuşat ---
+const TUT_MS = 600, YUMUSAK = 0.5, ESLES_PX = 25;
+let iz = null, bulmaOrani = 0;
+
+function izle(yeni, simdi) {
+  bulmaOrani = 0.95 * bulmaOrani + 0.05 * (yeni ? 1 : 0);
+  const taze = iz && simdi - iz.zaman < TUT_MS;
+  if (!yeni) return taze ? { kutu: iz, tutulan: true } : null;
+  let kose = yeni.kose;
+  if (taze) {
+    // köşe sırası kareler arasında dönebilir: eskiyle en iyi eşleşen döndürmeyi seç
+    let enIyi = null, enD = Infinity;
+    for (let r = 0; r < 4; r++) {
+      const k = kose.slice(r).concat(kose.slice(0, r));
+      const d = k.reduce((t, p, i) => t + Math.hypot(p.x - iz.kose[i].x, p.y - iz.kose[i].y), 0) / 4;
+      if (d < enD) { enD = d; enIyi = k; }
+    }
+    if (enD < ESLES_PX) kose = enIyi.map((p, i) => ({ x: YUMUSAK * p.x + (1 - YUMUSAK) * iz.kose[i].x, y: YUMUSAK * p.y + (1 - YUMUSAK) * iz.kose[i].y }));
+  }
+  iz = { ...yeni, kose, zaman: simdi };
+  return { kutu: iz, tutulan: false };
+}
+
 function telKafes(p, s, renk, kalinlik, kesik) {
   ctx.strokeStyle = renk; ctx.lineWidth = kalinlik; ctx.setLineDash(kesik ? [8, 6] : []);
   ctx.beginPath();
@@ -348,7 +371,9 @@ function dongu() {
   const s = ekran.width / islemC.width;
   let bilgi = "", olcum = "";
   try {
-    const kutu = kutuBulBolge(src);
+    const izl = izle(kutuBulBolge(src), simdi);
+    const kutu = izl && izl.kutu;
+    ctx.globalAlpha = izl && izl.tutulan ? 0.4 : 1;
     if (kutu) {
       const ustZ = kapakTakili ? G.kapakUst : G.duvarUst;
       const poz = pozBul(kutu.kose, islemC.width, islemC.height);
@@ -376,7 +401,7 @@ function dongu() {
         }
         const t = poz.tvec.data64F;
         teshis.tvec = Array.from(t).map((v) => +v.toFixed(1)); teshis.rvec = Array.from(poz.rvec.data64F).map((v) => +v.toFixed(3));
-        bilgi = `kutu: ${kutu.yontem}, uzaklık ${Math.hypot(t[0], t[1], t[2]).toFixed(0)} mm`;
+        bilgi = (izl.tutulan ? "SON GÖRÜLEN · " : "") + `kutu: ${kutu.yontem}, uzaklık ${Math.hypot(t[0], t[1], t[2]).toFixed(0)} mm`;
         poz.rvec.delete(); poz.tvec.delete(); poz.K.delete(); poz.D.delete();
       }
       // seçilen silüet (sarı ince): neyi kutu sandığını göster
@@ -388,6 +413,8 @@ function dongu() {
       for (const p of kutu.kose) { ctx.beginPath(); ctx.arc(p.x * s, p.y * s, 5, 0, 7); ctx.fill(); }
     } else bilgi = "kutu bulunamadı" + (teshis.reddedilen && teshis.reddedilen.length ? " (" + [...new Set(teshis.reddedilen)].join(", ") + ")" : ": çerçevenin içine al");
   } catch (e) { bilgi = "hata: " + (e.message || e); }
+  ctx.globalAlpha = 1;
+  bilgi += ` · bulma %${Math.round(bulmaOrani * 100)}`;
   { // arama çerçevesi
     const b = aramaBolgesi(islemC.width, islemC.height);
     ctx.strokeStyle = "rgba(255,255,255,0.7)"; ctx.lineWidth = 2; ctx.setLineDash([12, 8]);
