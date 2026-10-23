@@ -11,6 +11,7 @@ const G = {
   kapakUst: 26,       // kapak takılıyken üst yüz
   kup: 15,            // küp kenarı, ortada
 };
+const SURUM = "v0.7";   // her yayında artır; ekranda görünür (doğru sürüm mü kontrolü)
 const ISLEM_G = 640;  // işlem genişliği (px)
 const BOLGE = 0.6;              // arama çerçevesi: kısa kenarın oranı, ekran ortasında
 const UZAK = [120, 350];        // kabul edilen kamera-kutu uzaklığı (mm)
@@ -33,6 +34,9 @@ const KAYIT_ARALIK = 3000;   // ms
 const KAYIT_ADRES = location.hostname.endsWith("github.io") ? "https://192.168.1.185:8443/kayit" : "kayit";
 let tekKare = false;   // Teşhis düğmesi: bir karede maskeleri çiz, sonra kolaj yap
 const maskeCiz = () => maskeGoster || kayitAcik || tekKare;
+
+document.title = "Kutu Overlay " + SURUM;
+$("surum").textContent = SURUM;
 
 function cvYuklendi() {
   const bitti = () => { cvHazir = true; durum("OpenCV hazır. Kamerayı başlat."); };
@@ -618,6 +622,6 @@ function dongu() {
   teshis.durum = bilgi;
   if (tekKare) { tekKare = false; teshisPaylas(); }
   if (kayitAcik && simdi - kayitSon > KAYIT_ARALIK) { kayitSon = simdi; kaydet(); }
-  durum(`${bilgi}\nFPS ${fps.toFixed(0)} · görüntü ${ekran.width}×${ekran.height}` + (kayitAcik ? ` · kayıt ${kayitSayi}` : "") + (kayitHata ? "\n" + kayitHata : ""));
+  durum(`${SURUM} · ${bilgi}\nFPS ${fps.toFixed(0)} · görüntü ${ekran.width}×${ekran.height}` + (kayitAcik ? ` · kayıt ${kayitSayi}` : "") + (kayitHata ? "\n" + kayitHata : ""));
   requestAnimationFrame(dongu);
 }
