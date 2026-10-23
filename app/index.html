@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Kutu Overlay v0</title>
+<title>Kutu Overlay</title>
 <style>
   :root { --bg:#0d0f12; --fg:#e8ebef; --soluk:#8a929c; --vurgu:#36d6c3; --uyari:#ffb347; }
   * { box-sizing: border-box; }
@@ -13,12 +13,17 @@
   canvas#maske { position:absolute; right:8px; top:8px; width:28%; border:1px solid var(--soluk); display:none; }
   #panel { padding:10px max(12px, env(safe-area-inset-left)); display:grid; gap:10px; }
   .satir { display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
-  button { background:#1d232b; color:var(--fg); border:1px solid #2f3842; border-radius:8px; padding:10px 14px; font-size:15px; }
+  button, select { background:#1d232b; color:var(--fg); border:1px solid #2f3842; border-radius:8px; padding:10px 14px; font-size:15px; }
   button.aktif { border-color:var(--vurgu); color:var(--vurgu); }
   label { display:flex; gap:8px; align-items:center; width:100%; }
+  label.kucuk { width:auto; }
   input[type=range] { flex:1; }
+  details { border:1px solid #2f3842; border-radius:8px; padding:8px 10px; }
+  summary { color:var(--soluk); cursor:pointer; }
   #durum { font-family:ui-monospace, monospace; font-size:13px; color:var(--soluk); white-space:pre-line; }
-  #olcum { font-family:ui-monospace, monospace; font-size:18px; color:var(--uyari); min-height:1.4em; }
+  #olcum { font-family:ui-monospace, monospace; font-size:17px; color:var(--uyari); min-height:1.4em; }
+  #olcumSonuc { font-family:ui-monospace, monospace; font-size:13px; color:var(--fg); white-space:pre-line; }
+  #kalibDurum { font-family:ui-monospace, monospace; font-size:12px; color:var(--soluk); }
 </style>
 </head>
 <body>
@@ -30,24 +35,44 @@
   <div class="satir">
     <span id="surum" style="color:var(--vurgu);font:600 15px ui-monospace,monospace"></span>
     <button id="basla">Kamerayı başlat</button>
+    <select id="mod">
+      <option value="aruco">Poz: taban ArUco</option>
+      <option value="markersiz">Poz: markersız</option>
+      <option value="ikisi" selected>Poz: ikisi (kıyas)</option>
+    </select>
     <button id="kapak" class="aktif">Kapak: takılı</button>
-    <button id="maskeBtn">Maske</button>
-    <button id="odak">Odağı kilitle</button>
-    <button id="teshis">Teşhis</button>
-    <button id="kayit">Kayıt</button>
   </div>
   <div class="satir">
-    <label style="width:auto"><input id="kilitAc" type="checkbox" checked> Kilit + takip</label>
-    <button id="kilitBirak">Kilidi bırak</button>
-    <label style="width:auto"><input id="yumusat" type="checkbox" checked> Yumuşat</label>
+    <button id="olc">Ölç (300 kare)</button>
+    <button id="teshis">Teşhis</button>
+    <button id="kameraKilit">Kamerayı kilitle</button>
   </div>
-  <label>Eşik <input id="esik" type="range" min="20" max="230" value="110"><span id="esikV">110</span>
-    <input id="otomatik" type="checkbox" checked> oto</label>
-  <label>Görüş açısı° <input id="fov" type="range" min="45" max="85" value="65"><span id="fovV">65</span></label>
   <div id="olcum"></div>
+  <div id="olcumSonuc"></div>
   <div id="durum">OpenCV yükleniyor…</div>
+  <details>
+    <summary>Kalibrasyon (taban plakasıyla)</summary>
+    <div class="satir" style="margin-top:8px">
+      <button id="kalibEkle">Kalib: görüntü ekle (0)</button>
+      <button id="kalibHesapla">Hesapla</button>
+      <button id="kalibSifirla">Sıfırla</button>
+    </div>
+    <div id="kalibDurum"></div>
+  </details>
+  <details>
+    <summary>Ayarlar</summary>
+    <div class="satir" style="margin-top:8px">
+      <label class="kucuk"><input id="yumusat" type="checkbox" checked> Yumuşat (yalnız çizim)</label>
+      <label class="kucuk"><input id="kilitAc" type="checkbox" checked> Kilit + takip</label>
+      <button id="kilitBirak">Kilidi bırak</button>
+      <button id="maskeBtn">Maske</button>
+    </div>
+    <label>Eşik <input id="esik" type="range" min="20" max="230" value="110"><span id="esikV">110</span>
+      <input id="otomatik" type="checkbox" checked> oto</label>
+    <label>Görüş açısı° <input id="fov" type="range" min="45" max="85" value="65"><span id="fovV">65</span></label>
+  </details>
 </div>
-<script src="app.js?v=0.8"></script>
+<script src="app.js?v=1.0"></script>
 <script async src="vendor/opencv.js" onload="cvYuklendi()"></script>
 </body>
 </html>
