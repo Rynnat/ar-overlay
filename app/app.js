@@ -29,6 +29,8 @@ let sonZaman = performance.now(), fps = 0;
 let kayitHata = "";
 let kayitAcik = false, kayitSon = 0, kayitSayi = 0, teshis = {};
 const KAYIT_ARALIK = 3000;   // ms
+// GitHub Pages'ten açılınca kayıtlar laptoptaki server.py'ye gider (aynı Wi-Fi)
+const KAYIT_ADRES = location.hostname.endsWith("github.io") ? "https://192.168.1.185:8443/kayit" : "kayit";
 const maskeCiz = () => maskeGoster || kayitAcik;
 
 function cvYuklendi() {
@@ -90,12 +92,12 @@ async function kaydet() {
     const iz = akis.getVideoTracks()[0];
     const bilgi = { ...teshis, kapakTakili, fov: +$("fov").value, otomatikEsik: $("otomatik").checked,
       kamera: iz.getSettings ? iz.getSettings() : null, tarayici: navigator.userAgent, zaman: new Date().toISOString() };
-    const y = await fetch("kayit", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ bilgi, gorseller }) });
+    const y = await fetch(KAYIT_ADRES, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ bilgi, gorseller }) });
     if (!y.ok) throw new Error("sunucu " + y.status);
     kayitSayi++;
   } catch (e) {
     kayitAcik = false; $("kayit").classList.remove("aktif"); $("kayit").textContent = "Kayıt";
-    kayitHata = "Kayıt gönderilemedi: " + e.message + " (uygulamayı laptoptaki sunucudan aç; GitHub sayfası kaydedemez)";
+    kayitHata = "Kayıt gönderilemedi: " + e.message + " (aynı Wi-Fi'da mısın? önce https://192.168.1.185:8443 adresini bir kez açıp uyarıyı geç)";
   } finally { kayitGidiyor = false; }
 }
 
