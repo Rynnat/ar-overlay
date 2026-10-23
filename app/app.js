@@ -16,6 +16,7 @@ const ISLEM_G = 640;  // işlem genişliği (px)
 const $ = (id) => document.getElementById(id);
 const ekran = $("ekran"), ctx = ekran.getContext("2d");
 const maskeC = $("maske");
+const maske2C = document.createElement("canvas");   // kapak maskesi (yalnız kayıt için)
 const islemC = document.createElement("canvas"), islemCtx = islemC.getContext("2d", { willReadFrequently: true });
 const video = document.createElement("video");
 video.playsInline = true; video.muted = true;
@@ -23,6 +24,10 @@ video.playsInline = true; video.muted = true;
 let cvHazir = false, akis = null;
 let kapakTakili = true, maskeGoster = false;
 let sonZaman = performance.now(), fps = 0;
+let kayitHata = "";
+let kayitAcik = false, kayitSon = 0, kayitSayi = 0, teshis = {};
+const KAYIT_ARALIK = 3000;   // ms
+const maskeCiz = () => maskeGoster || kayitAcik;
 
 function cvYuklendi() {
   const bitti = () => { cvHazir = true; durum("OpenCV hazır. Kamerayı başlat."); };
@@ -63,6 +68,35 @@ $("odak").onclick = async () => {
     $("odak").classList.add("aktif"); $("odak").textContent = "Odak kilitli";
   } catch (e) { durum("Odak kilitlenemedi: " + e.message); }
 };
+$("kayit").onclick = (e) => {
+  kayitAcik = !kayitAcik; kayitSon = 0; kayitHata = "";
+  e.target.classList.toggle("aktif", kayitAcik);
+  e.target.textContent = kayitAcik ? "Kayıt: açık" : "Kayıt";
+};
+
+let kayitGidiyor = false;
+async function kaydet() {
+  // ham kare + overlay'li ekran + maskeler + sayılar -> laptoptaki server.py (/kayit)
+  if (kayitGidiyor) return;
+  kayitGidiyor = true;
+  try {
+    const ham = document.createElement("canvas");
+    ham.width = video.videoWidth; ham.height = video.videoHeight;
+    ham.getContext("2d").drawImage(video, 0, 0);
+    const gorseller = { ham: ham.toDataURL("image/jpeg", 0.9), ekran: ekran.toDataURL("image/jpeg", 0.8), maske: maskeC.toDataURL("image/png") };
+    if (maske2C.width) gorseller.kapakMaske = maske2C.toDataURL("image/png");
+    const iz = akis.getVideoTracks()[0];
+    const bilgi = { ...teshis, kapakTakili, fov: +$("fov").value, otomatikEsik: $("otomatik").checked,
+      kamera: iz.getSettings ? iz.getSettings() : null, tarayici: navigator.userAgent, zaman: new Date().toISOString() };
+    const y = await fetch("kayit", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ bilgi, gorseller }) });
+    if (!y.ok) throw new Error("sunucu " + y.status);
+    kayitSayi++;
+  } catch (e) {
+    kayitAcik = false; $("kayit").classList.remove("aktif"); $("kayit").textContent = "Kayıt";
+    kayitHata = "Kayıt gönderilemedi: " + e.message + " (uygulamayı laptoptaki sunucudan aç; GitHub sayfası kaydedemez)";
+  } finally { kayitGidiyor = false; }
+}
+
 for (const [id, v] of [["esik", "esikV"], ["fov", "fovV"]]) $(id).oninput = () => ($(v).textContent = $(id).value);
 
 // --- yardımcılar ---
@@ -84,10 +118,11 @@ function kutuBul(src) {
     cv.GaussianBlur(gri, gri, new cv.Size(5, 5), 0);
     const oto = $("otomatik").checked;
     const t = cv.threshold(gri, ikili, +$("esik").value, 255, cv.THRESH_BINARY_INV | (oto ? cv.THRESH_OTSU : 0));
+    teshis.esik1 = t;
     if (oto) { $("esik").value = Math.round(t); $("esikV").textContent = Math.round(t); }
     const k = cv.getStructuringElement(cv.MORPH_RECT, new cv.Size(7, 7));
     cv.morphologyEx(ikili, ikili, cv.MORPH_CLOSE, k); k.delete();
-    if (maskeGoster) cv.imshow(maskeC, ikili);
+    if (maskeCiz()) cv.imshow(maskeC, ikili);
     cv.findContours(ikili, kont, hiy, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE);
     let enIyi = -1, enAlan = src.rows * src.cols * 0.003;
     for (let i = 0; i < kont.size(); i++) {
@@ -97,6 +132,7 @@ function kutuBul(src) {
     if (enIyi >= 0) {
       const c = kont.get(enIyi), yak = new cv.Mat();
       const silAlan = enAlan;
+      teshis.silAlan = silAlan; teshis.silKont = c.data32S.length / 2;
       // önce gri kapağı ara: silüet içinde siyah duvardan açık kalan bölge = üst yüz
       const ust = kapakTakili ? ustYuzBul(gri, c, silAlan) : null;
       if (ust) { yak.delete(); return { kose: koseSirala(ust), yontem: "gri kapak", kont: c.data32S.slice() }; }
@@ -130,7 +166,7 @@ function ustYuzBul(gri, c, silAlan) {
     const hist = new Array(256).fill(0), g = gri.data, m = sil.data;
     let n = 0;
     for (let i = 0; i < g.length; i++) if (m[i]) { hist[g[i]]++; n++; }
-    if (n < 200) { k.delete(); silTam.delete(); return null; }
+    if (n < 200) { teshis.kapak = { red: "silüet çok küçük" }; k.delete(); silTam.delete(); return null; }
     let top = 0; for (let i = 0; i < 256; i++) top += i * hist[i];
     let wB = 0, sB = 0, enIyiV = -1, t2 = 0, m0 = 0, m1 = 0;
     for (let i = 0; i < 256; i++) {
@@ -140,6 +176,7 @@ function ustYuzBul(gri, c, silAlan) {
       const mB = sB / wB, mF = (top - sB) / wF, v = wB * wF * (mB - mF) ** 2;
       if (v > enIyiV) { enIyiV = v; t2 = i; m0 = mB; m1 = mF; }
     }
+    teshis.kapak = { esik2: t2, koyuOrt: +m0.toFixed(1), acikOrt: +m1.toFixed(1), n };
     if (m1 - m0 < 25) { k.delete(); silTam.delete(); return null; }   // kapak ile duvar ayrışmıyor
     cv.threshold(gri, acik, t2, 255, cv.THRESH_BINARY);
     cv.bitwise_and(acik, sil, acik);
@@ -147,13 +184,14 @@ function ustYuzBul(gri, c, silAlan) {
     cv.morphologyEx(acik, acik, cv.MORPH_OPEN, k);
     cv.dilate(acik, acik, k); cv.bitwise_and(acik, silTam, acik);   // aşındırma kaymasını geri al
     k.delete(); silTam.delete();
-    if (maskeGoster) cv.imshow(maskeC, acik);
+    if (kayitAcik) { maske2C.width = acik.cols; maske2C.height = acik.rows; cv.imshow(maske2C, acik); }
     cv.findContours(acik, kont, hiy, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE);
     let enIyi = -1, enAlan = silAlan * 0.25;
     for (let i = 0; i < kont.size(); i++) { const a = cv.contourArea(kont.get(i)); if (a > enAlan) { enAlan = a; enIyi = i; } }
-    if (enIyi < 0) return null;
+    if (enIyi < 0) { teshis.kapak.red = "yeterli büyük açık bölge yok"; return null; }
     const ck = kont.get(enIyi);
     cv.approxPolyDP(ck, yak, 0.04 * cv.arcLength(ck, true), true);
+    teshis.kapak.alan = enAlan; teshis.kapak.koseSayi = yak.rows;
     if (yak.rows !== 4 || !cv.isContourConvex(yak)) return null;
     const pts = []; for (let i = 0; i < 4; i++) pts.push({ x: yak.data32S[i * 2], y: yak.data32S[i * 2 + 1] });
     return pts;
@@ -219,6 +257,8 @@ function dongu() {
   if (!cvHazir) { requestAnimationFrame(dongu); return; }
   islemCtx.drawImage(video, 0, 0, islemC.width, islemC.height);
   const src = cv.imread(islemC);
+  teshis = { goruntu: [islemC.width, islemC.height] };
+  maske2C.width = 0;
   const s = ekran.width / islemC.width;
   let bilgi = "", olcum = "";
   try {
@@ -244,10 +284,12 @@ function dongu() {
             ctx.closePath(); ctx.stroke();
             ctx.fillStyle = "#ffb347"; ctx.beginPath(); ctx.arc(kir.x * s, kir.y * s, 6, 0, 7); ctx.fill();
             ctx.strokeStyle = "#ffb347"; ctx.beginPath(); ctx.moveTo(kir.x * s, kir.y * s); ctx.lineTo(tahmin.x * s, tahmin.y * s); ctx.stroke();
+            teshis.kirmizi = { merkez: [kir.x, kir.y], tahmin: [tahmin.x, tahmin.y], farkMm };
             olcum = `fark ≈ ${farkMm.toFixed(1)} mm (yaklaşık, üstten bakışta)`;
           } else olcum = "kırmızı küp görünmüyor";
         }
         const t = poz.tvec.data64F;
+        teshis.tvec = Array.from(t).map((v) => +v.toFixed(1)); teshis.rvec = Array.from(poz.rvec.data64F).map((v) => +v.toFixed(3));
         bilgi = `kutu: ${kutu.yontem}, uzaklık ${Math.hypot(t[0], t[1], t[2]).toFixed(0)} mm`;
         poz.rvec.delete(); poz.tvec.delete(); poz.K.delete(); poz.D.delete();
       }
@@ -255,12 +297,15 @@ function dongu() {
       ctx.strokeStyle = "rgba(255,230,0,0.9)"; ctx.lineWidth = 1.5; ctx.beginPath();
       for (let j = 0; j < kutu.kont.length; j += 2) (j ? ctx.lineTo : ctx.moveTo).call(ctx, kutu.kont[j] * s, kutu.kont[j + 1] * s);
       ctx.closePath(); ctx.stroke();
+      teshis.yontem = kutu.yontem; teshis.kose = kutu.kose;
       ctx.fillStyle = "#36d6c3";
       for (const p of kutu.kose) { ctx.beginPath(); ctx.arc(p.x * s, p.y * s, 5, 0, 7); ctx.fill(); }
     } else bilgi = "kutu bulunamadı (beyaz kağıt üstünde mi?)";
   } catch (e) { bilgi = "hata: " + (e.message || e); }
   src.delete();
   $("olcum").textContent = olcum;
-  durum(`${bilgi}\nFPS ${fps.toFixed(0)} · görüntü ${ekran.width}×${ekran.height}`);
+  teshis.durum = bilgi;
+  if (kayitAcik && simdi - kayitSon > KAYIT_ARALIK) { kayitSon = simdi; kaydet(); }
+  durum(`${bilgi}\nFPS ${fps.toFixed(0)} · görüntü ${ekran.width}×${ekran.height}` + (kayitAcik ? ` · kayıt ${kayitSayi}` : "") + (kayitHata ? "\n" + kayitHata : ""));
   requestAnimationFrame(dongu);
 }
