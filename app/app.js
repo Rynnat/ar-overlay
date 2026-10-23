@@ -4,7 +4,7 @@
 // Ölçüm her zaman HAM pozdan; 1€ filtresi yalnız çizimde. "Ölç" modu sabit telefonda titremeyi sayıyla verir.
 // Geometri: ../asama0/v2/geometri.json (kutu), ../asama0/v3/geometri_v3.json (taban). mm, iç taban z=0, +z kameraya.
 
-const SURUM = "v1.7";   // her yayında artır; ekranda görünür (doğru sürüm mü kontrolü)
+const SURUM = "v1.8";   // her yayında artır; ekranda görünür (doğru sürüm mü kontrolü)
 
 const G = {
   dis: 30,            // kutu dış kenar (kapak da 30)
@@ -78,6 +78,12 @@ function kameraDurdur() {
   $("kamera").textContent = "Aç"; $("kamera").classList.remove("acik");
 }
 $("kamera").onclick = () => (akis ? kameraDurdur() : kameraBaslat());
+let overlayAcik = true;
+$("overlay").onclick = () => {
+  overlayAcik = !overlayAcik;
+  $("overlay").classList.toggle("acik", overlayAcik);
+  olayLog("overlay", { overlayAcik });
+};
 // sayfa açılınca dene; tarayıcı dokunuş isterse düğme kalır
 kameraBaslat();
 // kamera karesi gelince işle (requestVideoFrameCallback); yoksa ekran tazelemesine bağlı
@@ -535,7 +541,8 @@ function pozBulMarkersiz(kose, w, h) {
 }
 
 // ====================== ARUCO TABAN ======================
-let arucoDet = null;
+let arucoDet = null, arucoSayac = 0, arucoSonGorulen = 0;
+const ARUCO_TARAMA = 10;
 function arucoHazirla() {
   const p = new cv.aruco_DetectorParameters();
   p.cornerRefinementMethod = 1;   // CORNER_REFINE_SUBPIX
@@ -646,6 +653,21 @@ function overlayCiz(poz, s, t, anahtar, renkKup) {
 }
 
 // kırmızı küp: görüntüdeki üst yüz merkezinin ışınını küp üstü düzlemiyle (z = kup) kesiştir -> kutu koordinatında yer
+function kirmiziBulBolge(src, poz) {
+  // kutunun izdüşümünün çevresi (iç boşluk + pay) -> yalnız orada ara; tam karede 4-5 kat pahalı
+  const d = G.dis / 2 + 4, k = yansit(poz, kutuKoseleri(-d, d, -d, d, 0, G.kapakUst));
+  const xs = k.map((p) => p.x), ys = k.map((p) => p.y);
+  const x0 = Math.max(0, Math.floor(Math.min(...xs))), y0 = Math.max(0, Math.floor(Math.min(...ys)));
+  const x1 = Math.min(src.cols, Math.ceil(Math.max(...xs))), y1 = Math.min(src.rows, Math.ceil(Math.max(...ys)));
+  if (x1 - x0 < 8 || y1 - y0 < 8) return null;
+  const parca = src.roi(new cv.Rect(x0, y0, x1 - x0, y1 - y0));
+  try {
+    const kir = kirmiziBul(parca);
+    if (!kir) return null;
+    kir.x += x0; kir.y += y0; kir.kont = kir.kont.map((v, i) => v + (i % 2 ? y0 : x0));
+    return kir;
+  } finally { parca.delete(); }
+}
 function kirmiziBul(src) {
   const hsv = new cv.Mat(), m1 = new cv.Mat(), m2 = new cv.Mat(), kont = new cv.MatVector(), hiy = new cv.Mat();
   let sonuc = null;
@@ -1047,9 +1069,12 @@ function dongu(meta) {
     let anaPoz = null;   // kırmızı küp ölçümü ve kalibrasyon bilgisi için öncelikli poz (aruco > markersız)
     let markerler = [], arucoPozu = null;
 
-    // --- ArUco taban ---
-    if (m !== "markersiz") {
+    // --- ArUco taban (marker görülmüyorsa her karede değil, ARUCO_TARAMA karede bir ara: pahalı) ---
+    arucoSayac++;
+    const arucoBak = m !== "markersiz" && (arucoSonGorulen > 0 || arucoSayac % ARUCO_TARAMA === 0);
+    if (arucoBak) {
       markerler = markerBul(gri);
+      arucoSonGorulen = markerler.some((x) => TABAN.merkez[x.id]) ? 30 : Math.max(0, arucoSonGorulen - 1);
       ctx.lineWidth = 2; ctx.font = `${Math.round(13 * s)}px system-ui`;
       for (const mk of markerler) {
         ctx.strokeStyle = TABAN.merkez[mk.id] ? "rgba(80,255,120,0.9)" : "rgba(255,80,80,0.9)";
@@ -1110,7 +1135,7 @@ function dongu(meta) {
 
     // --- kapak çıkıkken: kırmızı küpün yeri (ham poz, ışın-düzlem kesişimi) ---
     asama.markersiz = performance.now() - t0; t0 = performance.now();
-    const kir = anaPoz ? kirmiziBul(src) : null, kirYer = kir ? kupYeri(anaPoz, kir) : null;
+    const kir = anaPoz ? kirmiziBulBolge(src, anaPoz) : null, kirYer = kir ? kupYeri(anaPoz, kir) : null;
     if (anaPoz) kapakOtomatik(!!(kirYer && Math.abs(kirYer.x) < G.ic / 2 + 2 && Math.abs(kirYer.y) < G.ic / 2 + 2));
     if (anaPoz && !kapakTakili) {
       if (kir) {
@@ -1151,6 +1176,7 @@ function dongu(meta) {
   src.delete();
   if (olcumYazi) $("olcum").textContent = olcumYazi; else $("olcum").textContent = "";
   teshis.durum = bilgi.join(" | ");
+  if (!overlayAcik) ctx.drawImage(video, 0, 0, ekran.width, ekran.height);
   if (tekKare) { tekKare = false; teshisPaylas(); }
   durum(`${SURUM} · ${bilgi.join("\n")}\nFPS ${fps.toFixed(0)} · ${kayit.ms.toFixed(0)} ms/kare · ${ekran.width}×${ekran.height} · ${kalib && kalib.w === W ? "kalibre" : "FOV " + $("fov").value + "°"}`);
   kareBekle();

@@ -8,10 +8,11 @@
   * { box-sizing: border-box; }
   html, body { margin:0; height:100%; background:#000; overflow:hidden; font:14px system-ui, sans-serif; }
   canvas#ekran { position:fixed; inset:0; width:100vw; height:100vh; object-fit:contain; background:#000; }
-  #kamera { position:fixed; left:50%; bottom:calc(24px + env(safe-area-inset-bottom)); transform:translateX(-50%);
-    width:72px; height:72px; border-radius:50%; border:3px solid #fff; background:rgba(0,0,0,.35); color:#fff;
+  #dugmeler { position:fixed; left:50%; bottom:calc(24px + env(safe-area-inset-bottom)); transform:translateX(-50%); display:flex; gap:18px; }
+  #dugmeler button { width:72px; height:72px; border-radius:50%; border:3px solid #fff; background:rgba(0,0,0,.35); color:#fff;
     font-size:13px; font-weight:600; }
   #kamera.acik { background:#e5484d; border-color:#e5484d; }
+  #overlay.acik { background:#36d6c3; border-color:#36d6c3; color:#000; }
   #surum { position:fixed; top:calc(8px + env(safe-area-inset-top)); left:10px; color:rgba(255,255,255,.6); font:600 12px ui-monospace, monospace; }
   /* uygulamanın iç durumu: görünmez, değerleri kod ve kayıt kullanır */
   #gizli { display:none; }
@@ -20,7 +21,10 @@
 <body>
 <canvas id="ekran"></canvas>
 <span id="surum"></span>
-<button id="kamera">Aç</button>
+<div id="dugmeler">
+  <button id="kamera">Aç</button>
+  <button id="overlay" class="acik">Overlay</button>
+</div>
 
 <div id="gizli">
   <canvas id="maske"></canvas>
@@ -39,8 +43,8 @@
   <input id="esik" type="range" min="20" max="230" value="110"><span id="esikV"></span><input id="otomatik" type="checkbox" checked>
   <input id="fov" type="range" min="45" max="85" value="65"><span id="fovV"></span>
 </div>
-<script src="kayit.js?v=1.7"></script>
-<script src="app.js?v=1.7"></script>
+<script src="kayit.js?v=1.8"></script>
+<script src="app.js?v=1.8"></script>
 <script async src="vendor/opencv.js" onload="cvYuklendi()"></script>
 </body>
 </html>
