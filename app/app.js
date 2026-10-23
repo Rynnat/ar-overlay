@@ -160,6 +160,45 @@ function kutuBulBolge(src, b = aramaBolgesi(src.cols, src.rows)) {
   return k;
 }
 
+function koseIncelt(kont, kose) {
+  // tamsayı köşe yerine: her kenara yakın kontur noktalarından doğru uydur (toplam en küçük kareler),
+  // komşu doğruları kesiştir -> alt-piksel köşe. Köşe yakınındaki yuvarlak kısım dışarıda bırakılır.
+  const kenarlar = [0, 1, 2, 3].map(() => []);
+  for (let j = 0; j < kont.length; j += 2) {
+    const x = kont[j], y = kont[j + 1];
+    let enK = -1, enD = 3;   // kenara en fazla 3 px
+    for (let k = 0; k < 4; k++) {
+      const a = kose[k], b = kose[(k + 1) % 4], dx = b.x - a.x, dy = b.y - a.y, L2 = dx * dx + dy * dy;
+      const t = ((x - a.x) * dx + (y - a.y) * dy) / L2;
+      if (t < 0.15 || t > 0.85) continue;
+      const d = Math.abs((x - a.x) * dy - (y - a.y) * dx) / Math.sqrt(L2);
+      if (d < enD) { enD = d; enK = k; }
+    }
+    if (enK >= 0) kenarlar[enK].push(x, y);
+  }
+  const dogrular = [];
+  for (const p of kenarlar) {
+    const n = p.length / 2;
+    if (n < 3) return kose;   // kenar seyrek -> elle bırak
+    let mx = 0, my = 0; for (let i = 0; i < p.length; i += 2) { mx += p[i]; my += p[i + 1]; } mx /= n; my /= n;
+    let sxx = 0, sxy = 0, syy = 0;
+    for (let i = 0; i < p.length; i += 2) { const dx = p[i] - mx, dy = p[i + 1] - my; sxx += dx * dx; sxy += dx * dy; syy += dy * dy; }
+    const aci = 0.5 * Math.atan2(2 * sxy, sxx - syy);   // ana eksen yönü
+    dogrular.push({ mx, my, ux: Math.cos(aci), uy: Math.sin(aci) });
+  }
+  const yeni = [];
+  for (let k = 0; k < 4; k++) {
+    const A = dogrular[(k + 3) % 4], B = dogrular[k];   // köşe k = (k-1). kenar ile k. kenarın kesişimi
+    const det = A.ux * -B.uy - A.uy * -B.ux;
+    if (Math.abs(det) < 1e-6) return kose;
+    const t = ((B.mx - A.mx) * -B.uy - (B.my - A.my) * -B.ux) / det;
+    const q = { x: A.mx + t * A.ux, y: A.my + t * A.uy };
+    if (Math.hypot(q.x - kose[k].x, q.y - kose[k].y) > 4) return kose;   // saçma sonuç -> vazgeç
+    yeni.push(q);
+  }
+  return yeni;
+}
+
 function enBuyukKontur(kont, enAlan) {
   // MatVector.get() her çağrıda silinmesi gereken yeni bir Mat döndürür
   let enIyi = -1;
@@ -226,6 +265,7 @@ function kutuBul(src, alan) {
       let pts = [], yontem;
       if (yak.rows === 4 && cv.isContourConvex(yak)) {
         for (let i = 0; i < 4; i++) pts.push({ x: yak.data32S[i * 2], y: yak.data32S[i * 2 + 1] });
+        pts = koseIncelt(c.data32S, pts);
         yontem = "dörtgen";
       } else {
         const r = cv.minAreaRect(c);
@@ -276,11 +316,12 @@ function ustYuzBul(gri, c, silAlan) {
     const [enIyi, enAlan] = enBuyukKontur(kont, silAlan * 0.25);
     if (enIyi < 0) { teshis.kapak.red = "yeterli büyük açık bölge yok"; return null; }
     const ck = kont.get(enIyi);
-    cv.approxPolyDP(ck, yak, 0.04 * cv.arcLength(ck, true), true); ck.delete();
+    cv.approxPolyDP(ck, yak, 0.04 * cv.arcLength(ck, true), true);
+    const ckData = ck.data32S.slice(); ck.delete();
     teshis.kapak.alan = enAlan; teshis.kapak.koseSayi = yak.rows;
     if (yak.rows !== 4 || !cv.isContourConvex(yak)) return null;
     const pts = []; for (let i = 0; i < 4; i++) pts.push({ x: yak.data32S[i * 2], y: yak.data32S[i * 2 + 1] });
-    return pts;
+    return koseIncelt(ckData, pts);
   } finally { sil.delete(); acik.delete(); mv.delete(); kont.delete(); hiy.delete(); yak.delete(); }
 }
 
@@ -304,6 +345,14 @@ function kirmiziBul(src) {
   return sonuc;
 }
 
+let oncekiPoz = null;   // kilitliyken bir önceki karenin pozu + köşeleri
+const POZ_SICRAMA_DER = 15;
+function donusFarki(r1, r2) {
+  // iki Rodrigues vektörü arasındaki dönüş açısı (derece), kuaterniyon üzerinden
+  const q = (r) => { const th = Math.hypot(...r) || 1e-12, s = Math.sin(th / 2) / th; return [Math.cos(th / 2), r[0] * s, r[1] * s, r[2] * s]; };
+  const a = q(r1), b = q(r2), d = Math.abs(a[0] * b[0] + a[1] * b[1] + a[2] * b[2] + a[3] * b[3]);
+  return 2 * Math.acos(Math.min(1, d)) * 180 / Math.PI;
+}
 function pozBul(kose, w, h) {
   const L = G.dis;
   const obj = cv.matFromArray(4, 3, cv.CV_64F, [-L / 2, L / 2, 0, L / 2, L / 2, 0, L / 2, -L / 2, 0, -L / 2, -L / 2, 0]);
@@ -313,6 +362,19 @@ function pozBul(kose, w, h) {
   const D = cv.Mat.zeros(4, 1, cv.CV_64F), rvec = new cv.Mat(), tvec = new cv.Mat();
   const ok = cv.solvePnP(obj, img, K, D, rvec, tvec, false, cv.SOLVEPNP_IPPE_SQUARE);
   obj.delete(); img.delete();
+  if (ok) {
+    // düzlemsel kare iki eğime uyabilir; köşeler kımıldamadan poz tek karede çok dönerse bu sıçramadır
+    const r = Array.from(rvec.data64F), t = Array.from(tvec.data64F);
+    if (oncekiPoz) {
+      const hareket = kose.reduce((s, p, i) => s + Math.hypot(p.x - oncekiPoz.kose[i].x, p.y - oncekiPoz.kose[i].y), 0) / 4;
+      if (donusFarki(r, oncekiPoz.r) > POZ_SICRAMA_DER && hareket < 2) {
+        rvec.data64F.set(oncekiPoz.r); tvec.data64F.set(oncekiPoz.t);
+        teshis.pozSicramasi = (teshis.pozSicramasi || 0) + 1;
+        return { rvec, tvec, K, D };
+      }
+    }
+    oncekiPoz = { r, t, kose: kose.map((p) => ({ ...p })) };
+  }
   return ok ? { rvec, tvec, K, D } : (rvec.delete(), tvec.delete(), K.delete(), D.delete(), null);
 }
 
@@ -338,7 +400,7 @@ const KENARLAR = [[0, 1], [1, 2], [2, 3], [3, 0], [4, 5], [5, 6], [6, 7], [7, 4]
 const TAKIP = {
   enAzNokta: 6,          // homografi için gereken en az iyi nokta
   yenileAlti: 15,        // nokta sayısı bunun altına inince yeniden seç
-  dogrulaHarmani: 0.5,   // tespit bulunca köşeleri ona doğru ne kadar çek
+  dogrulaHarmani: 0.2,   // tespit bulunca köşeleri ona doğru ne kadar çek (düşük = daha az titreme)
   uyusmazSiniri: 15,     // art arda bu kadar uyuşmaz tespit -> tespite yeniden kilitlen
   bayatMs: 3000,         // bu süredir doğrulanmadıysa "doğrulanmadı" diye göster
 };
@@ -432,20 +494,47 @@ function takipEt(src, gri, simdi) {
   }
   if (tespit) {
     const [esli, d] = koseEsle(tespit.kose, kilit.kose);
-    if (d < kenarUz(kilit.kose) * 0.35) {
+    // gri kapak (üst yüz) ile silüet farklı dörtgenler: yalnız kilitteki yöntemle doğrula, yoksa ikisi arasında zıplar
+    const ayniYontem = tespit.yontem.split(',')[0] === kilit.yontem.split(',')[0];
+    if (!ayniYontem && tespit.yontem === "gri kapak") {   // daha iyi üst yüz bulundu -> kilidi ona yükselt
+      kilit = yeniKilit(tespit, gri, simdi);
+      return { kutu: kilit, durum: "yeni" };
+    }
+    if (!ayniYontem) teshis.yontemUyusmaz = tespit.yontem;
+    else if (d < kenarUz(kilit.kose) * 0.35) {
       const a = TAKIP.dogrulaHarmani;
       kilit.kose = esli.map((p, i) => ({ x: a * p.x + (1 - a) * kilit.kose[i].x, y: a * p.y + (1 - a) * kilit.kose[i].y }));
       kilit.kont = tespit.kont; kilit.yontem = tespit.yontem; kilit.dogrulandi = simdi; kilit.uyusmaz = 0;
       if (kilit.pts.length / 2 < TAKIP.yenileAlti) kilit.pts = noktaSec(gri, kilit.kose);
       return { kutu: kilit, durum: "doğrulandı" };
     }
-    if (++kilit.uyusmaz > TAKIP.uyusmazSiniri) {
+    if (ayniYontem && ++kilit.uyusmaz > TAKIP.uyusmazSiniri) {
       kilit = yeniKilit(tespit, gri, simdi);
       return { kutu: kilit, durum: "yeni" };
     }
   }
   if (kilit.pts.length / 2 < TAKIP.yenileAlti) kilit.pts = noktaSec(gri, kilit.kose);
   return { kutu: kilit, durum: simdi - kilit.dogrulandi > TAKIP.bayatMs ? "doğrulanmadı" : "takipte" };
+}
+
+class OneEuro {
+  constructor(minCutoff, beta, dCutoff = 1) { Object.assign(this, { minCutoff, beta, dCutoff, x: null, dx: 0, t: 0 }); }
+  static a(cutoff, dt) { const r = 2 * Math.PI * cutoff * dt; return r / (r + 1); }
+  filtre(x, t) {
+    if (this.x === null) { this.x = x; this.t = t; return x; }
+    const dt = Math.max((t - this.t) / 1000, 1e-3); this.t = t;
+    const dx = (x - this.x) / dt;
+    this.dx += OneEuro.a(this.dCutoff, dt) * (dx - this.dx);
+    const cutoff = this.minCutoff + this.beta * Math.abs(this.dx);
+    this.x += OneEuro.a(cutoff, dt) * (x - this.x);
+    return this.x;
+  }
+}
+const FILTRE = { minCutoff: 1.0, beta: 0.02 };   // px biriminde; minCutoff düşük = sabitken daha durgun
+let koseFiltre = null;
+function koseYumusat(kose, t) {
+  if (!koseFiltre) koseFiltre = kose.map(() => [new OneEuro(FILTRE.minCutoff, FILTRE.beta), new OneEuro(FILTRE.minCutoff, FILTRE.beta)]);
+  return kose.map((p, i) => ({ x: koseFiltre[i][0].filtre(p.x, t), y: koseFiltre[i][1].filtre(p.y, t) }));
 }
 
 function telKafes(p, s, renk, kalinlik, kesik) {
@@ -468,11 +557,14 @@ function dongu() {
   try {
     cv.cvtColor(src, gri, cv.COLOR_RGBA2GRAY);
     const tk = takipEt(src, gri, simdi);
+    if (!tk) { koseFiltre = null; oncekiPoz = null; }
     const kutu = tk && tk.kutu;
     ctx.globalAlpha = tk && tk.durum === "doğrulanmadı" ? 0.5 : 1;
     if (kutu) {
       const ustZ = kapakTakili ? G.kapakUst : G.duvarUst;
-      const poz = pozBul(kutu.kose, islemC.width, islemC.height);
+      if (tk.durum === "yeni") { koseFiltre = null; oncekiPoz = null; }
+      const goster = $("yumusat").checked ? koseYumusat(kutu.kose, simdi) : kutu.kose;
+      const poz = pozBul(goster, islemC.width, islemC.height);
       if (poz) {
         const d = G.dis / 2, i = G.ic / 2, k = G.kup / 2;
         telKafes(yansit(poz, kutuKoseleri(-d, d, -d, d, -G.tabanT, ustZ), ustZ), s, "rgba(200,210,220,0.55)", 2, false);
