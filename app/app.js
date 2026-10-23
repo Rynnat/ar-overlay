@@ -4,7 +4,7 @@
 // Ölçüm her zaman HAM pozdan; 1€ filtresi yalnız çizimde. "Ölç" modu sabit telefonda titremeyi sayıyla verir.
 // Geometri: ../asama0/v2/geometri.json (kutu), ../asama0/v3/geometri_v3.json (taban). mm, iç taban z=0, +z kameraya.
 
-const SURUM = "v1.8";   // her yayında artır; ekranda görünür (doğru sürüm mü kontrolü)
+const SURUM = "v1.9";   // her yayında artır; ekranda görünür (doğru sürüm mü kontrolü)
 
 const G = {
   dis: 30,            // kutu dış kenar (kapak da 30)
@@ -51,19 +51,23 @@ function cvYuklendi() {
 }
 function durum(t) { $("durum").textContent = t; }
 
+let kameraAciliyor = false;
 async function kameraBaslat() {
-  if (akis) return;
+  if (akis || kameraAciliyor) return;
+  kameraAciliyor = true;
   try {
     akis = await navigator.mediaDevices.getUserMedia({
       video: { facingMode: "environment", width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false,
     });
-  } catch (e) { akis = null; durum("Kamera açılamadı: " + e.message + "\n(\"Kamerayı başlat\"a dokun)"); return; }
+  } catch (e) { akis = null; kameraAciliyor = false; durum("Kamera açılamadı: " + e.message); return; }
+  kameraAciliyor = false;
   video.srcObject = akis; await video.play();
   ekran.width = video.videoWidth; ekran.height = video.videoHeight;
   islemC.width = ISLEM_G; islemC.height = Math.round(ISLEM_G * video.videoHeight / video.videoWidth);
   maskeC.width = islemC.width; maskeC.height = islemC.height;
   $("basla").textContent = "Çalışıyor";
   $("kamera").textContent = "Kapat"; $("kamera").classList.add("acik");
+  donguIptal();   // olası eski döngü kalmasın
   oturumBaslat({ surum: SURUM, mod: mod(), kamera: kameraBilgisi(), kalib, fov: +$("fov").value, jig: "etiketsiz",
     parametreler: { G, TABAN, ISLEM_G, BOLGE, UZAK, OLCUM_KARE, TAKIP, FILTRE, OTO, HAM, KAYIT, POZ_SICRAMA_DER } });
   kareBekle();
@@ -71,6 +75,7 @@ async function kameraBaslat() {
 $("basla").onclick = kameraBaslat;
 function kameraDurdur() {
   if (!akis) return;
+  donguIptal();
   akis.getTracks().forEach((t) => t.stop()); akis = null; video.srcObject = null;
   olayLog("kamera-kapandi", {}); tamponGonder();
   kilit = null; oncekiPoz = null; olcum = null; kameraKilitlendi = false; oto.pozIlk = null; oto.iz = [];
@@ -87,9 +92,23 @@ $("overlay").onclick = () => {
 // sayfa açılınca dene; tarayıcı dokunuş isterse düğme kalır
 kameraBaslat();
 // kamera karesi gelince işle (requestVideoFrameCallback); yoksa ekran tazelemesine bağlı
+// Döngü nesli: kamera her açılışta yeni nesil başlar. Kapatınca bekleyen çağrı iptal edilir; yine de
+// tetiklenirse (srcObject değişince eski rVFC çağrısı düşebilir) nesli eskiyse hiçbir şey yapmaz.
+// Bu olmadan her aç/kapa bir döngü daha ekliyordu (iş 2x, 3x...).
+let dongoNesil = 0, bekleyenCagri = null;
 function kareBekle() {
-  if (video.requestVideoFrameCallback) video.requestVideoFrameCallback((_, meta) => { gelenKare++; dongu(meta); });
-  else requestAnimationFrame(() => { gelenKare++; dongu(null); });
+  const nesil = dongoNesil;
+  const calis = (meta) => { bekleyenCagri = null; if (nesil !== dongoNesil) return; gelenKare++; dongu(meta); };
+  if (video.requestVideoFrameCallback) bekleyenCagri = { rvfc: video.requestVideoFrameCallback((_, meta) => calis(meta)) };
+  else bekleyenCagri = { raf: requestAnimationFrame(() => calis(null)) };
+}
+function donguIptal() {
+  dongoNesil++;
+  if (bekleyenCagri) {
+    if (bekleyenCagri.rvfc != null && video.cancelVideoFrameCallback) video.cancelVideoFrameCallback(bekleyenCagri.rvfc);
+    if (bekleyenCagri.raf != null) cancelAnimationFrame(bekleyenCagri.raf);
+    bekleyenCagri = null;
+  }
 }
 $("kapak").onclick = (e) => {
   kapakTakili = !kapakTakili;
