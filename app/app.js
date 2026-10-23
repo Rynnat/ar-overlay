@@ -96,6 +96,10 @@ function kutuBul(src) {
     }
     if (enIyi >= 0) {
       const c = kont.get(enIyi), yak = new cv.Mat();
+      const silAlan = enAlan;
+      // önce gri kapağı ara: silüet içinde siyah duvardan açık kalan bölge = üst yüz
+      const ust = kapakTakili ? ustYuzBul(gri, c, silAlan) : null;
+      if (ust) { yak.delete(); return { kose: koseSirala(ust), yontem: "gri kapak", kont: c.data32S.slice() }; }
       cv.approxPolyDP(c, yak, 0.04 * cv.arcLength(c, true), true);
       let pts = [], yontem;
       if (yak.rows === 4 && cv.isContourConvex(yak)) {
@@ -107,10 +111,53 @@ function kutuBul(src) {
         yontem = `en küçük dikdörtgen (${yak.rows} köşe bulundu)`;
       }
       yak.delete();
-      sonuc = { kose: koseSirala(pts), yontem };
+      sonuc = { kose: koseSirala(pts), yontem: "silüet, " + yontem, kont: c.data32S.slice() };
     }
   } finally { gri.delete(); ikili.delete(); kont.delete(); hiy.delete(); }
   return sonuc;
+}
+
+function ustYuzBul(gri, c, silAlan) {
+  // silüet maskesi içinde Otsu: koyu sınıf = siyah duvarlar, açık sınıf = metalik gri kapak
+  const sil = cv.Mat.zeros(gri.rows, gri.cols, cv.CV_8U), acik = new cv.Mat();
+  const mv = new cv.MatVector(), kont = new cv.MatVector(), hiy = new cv.Mat(), yak = new cv.Mat();
+  try {
+    mv.push_back(c);
+    cv.drawContours(sil, mv, 0, new cv.Scalar(255), cv.FILLED);
+    const k = cv.getStructuringElement(cv.MORPH_RECT, new cv.Size(5, 5));
+    const silTam = sil.clone();
+    cv.erode(sil, sil, k);   // kağıtla sınırdaki karışık pikselleri at (histogram için)
+    const hist = new Array(256).fill(0), g = gri.data, m = sil.data;
+    let n = 0;
+    for (let i = 0; i < g.length; i++) if (m[i]) { hist[g[i]]++; n++; }
+    if (n < 200) { k.delete(); silTam.delete(); return null; }
+    let top = 0; for (let i = 0; i < 256; i++) top += i * hist[i];
+    let wB = 0, sB = 0, enIyiV = -1, t2 = 0, m0 = 0, m1 = 0;
+    for (let i = 0; i < 256; i++) {
+      wB += hist[i]; if (!wB) continue;
+      const wF = n - wB; if (!wF) break;
+      sB += i * hist[i];
+      const mB = sB / wB, mF = (top - sB) / wF, v = wB * wF * (mB - mF) ** 2;
+      if (v > enIyiV) { enIyiV = v; t2 = i; m0 = mB; m1 = mF; }
+    }
+    if (m1 - m0 < 25) { k.delete(); silTam.delete(); return null; }   // kapak ile duvar ayrışmıyor
+    cv.threshold(gri, acik, t2, 255, cv.THRESH_BINARY);
+    cv.bitwise_and(acik, sil, acik);
+    cv.morphologyEx(acik, acik, cv.MORPH_CLOSE, k);
+    cv.morphologyEx(acik, acik, cv.MORPH_OPEN, k);
+    cv.dilate(acik, acik, k); cv.bitwise_and(acik, silTam, acik);   // aşındırma kaymasını geri al
+    k.delete(); silTam.delete();
+    if (maskeGoster) cv.imshow(maskeC, acik);
+    cv.findContours(acik, kont, hiy, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE);
+    let enIyi = -1, enAlan = silAlan * 0.25;
+    for (let i = 0; i < kont.size(); i++) { const a = cv.contourArea(kont.get(i)); if (a > enAlan) { enAlan = a; enIyi = i; } }
+    if (enIyi < 0) return null;
+    const ck = kont.get(enIyi);
+    cv.approxPolyDP(ck, yak, 0.04 * cv.arcLength(ck, true), true);
+    if (yak.rows !== 4 || !cv.isContourConvex(yak)) return null;
+    const pts = []; for (let i = 0; i < 4; i++) pts.push({ x: yak.data32S[i * 2], y: yak.data32S[i * 2 + 1] });
+    return pts;
+  } finally { sil.delete(); acik.delete(); mv.delete(); kont.delete(); hiy.delete(); yak.delete(); }
 }
 
 function kirmiziBul(src) {
@@ -204,6 +251,10 @@ function dongu() {
         bilgi = `kutu: ${kutu.yontem}, uzaklık ${Math.hypot(t[0], t[1], t[2]).toFixed(0)} mm`;
         poz.rvec.delete(); poz.tvec.delete(); poz.K.delete(); poz.D.delete();
       }
+      // seçilen silüet (sarı ince): neyi kutu sandığını göster
+      ctx.strokeStyle = "rgba(255,230,0,0.9)"; ctx.lineWidth = 1.5; ctx.beginPath();
+      for (let j = 0; j < kutu.kont.length; j += 2) (j ? ctx.lineTo : ctx.moveTo).call(ctx, kutu.kont[j] * s, kutu.kont[j + 1] * s);
+      ctx.closePath(); ctx.stroke();
       ctx.fillStyle = "#36d6c3";
       for (const p of kutu.kose) { ctx.beginPath(); ctx.arc(p.x * s, p.y * s, 5, 0, 7); ctx.fill(); }
     } else bilgi = "kutu bulunamadı (beyaz kağıt üstünde mi?)";
