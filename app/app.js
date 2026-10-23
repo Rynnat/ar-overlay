@@ -102,6 +102,7 @@ async function kaydet() {
   } finally { kayitGidiyor = false; }
 }
 
+$("kilitBirak").onclick = () => { kilit = null; };
 $("teshis").onclick = () => { if (akis) tekKare = true; };
 
 async function teshisPaylas() {
@@ -143,9 +144,8 @@ function aramaBolgesi(w, h) {
   return { x: Math.round((w - a) / 2), y: Math.round((h - a) / 2), w: a, h: a };
 }
 
-function kutuBulBolge(src) {
-  // yalnız ortadaki çerçevede ara; boyut, beklenen uzaklık aralığına uymalı
-  const b = aramaBolgesi(src.cols, src.rows);
+function kutuBulBolge(src, b = aramaBolgesi(src.cols, src.rows)) {
+  // yalnız verilen bölgede ara (varsayılan: ortadaki çerçeve); boyut, beklenen uzaklık aralığına uymalı
   const f = (src.cols / 2) / Math.tan((+$("fov").value * Math.PI / 180) / 2);
   const kenar = (z) => f * G.dis / z;   // üst yüzün piksel kenarı
   // silüet yan duvarlarla üst yüzden büyük görünebilir -> üst sınırda pay
@@ -330,27 +330,122 @@ function kutuKoseleri(x0, x1, y0, y1, z0, z1) {
 }
 const KENARLAR = [[0, 1], [1, 2], [2, 3], [3, 0], [4, 5], [5, 6], [6, 7], [7, 4], [0, 4], [1, 5], [2, 6], [3, 7]];
 
-// --- kareler arası takip: kısa kayıplarda son konumu tut, köşeleri yumuşat ---
-const TUT_MS = 600, YUMUSAK = 0.5, ESLES_PX = 25;
-let iz = null, bulmaOrani = 0;
+// --- kilit + takip + doğrulama ---
+// Kutu bir kez bulununca kilitlenir. Her karede kutu üstündeki/kenarındaki noktalar optik akışla
+// izlenir (homografi -> köşeler). Tespit, kutunun son yerinin çevresinde arka planda çalışır ve
+// bulduğunda takibi düzeltir (kayma birikmesin). Kilit yalnız kutu ekrandan çıkınca ya da
+// noktalar kaybolunca bırakılır.
+const TAKIP = {
+  enAzNokta: 6,          // homografi için gereken en az iyi nokta
+  yenileAlti: 15,        // nokta sayısı bunun altına inince yeniden seç
+  dogrulaHarmani: 0.5,   // tespit bulunca köşeleri ona doğru ne kadar çek
+  uyusmazSiniri: 15,     // art arda bu kadar uyuşmaz tespit -> tespite yeniden kilitlen
+  bayatMs: 3000,         // bu süredir doğrulanmadıysa "doğrulanmadı" diye göster
+};
+let kilit = null, oncekiGri = null, bulmaOrani = 0;
 
-function izle(yeni, simdi) {
-  bulmaOrani = 0.95 * bulmaOrani + 0.05 * (yeni ? 1 : 0);
-  const taze = iz && simdi - iz.zaman < TUT_MS;
-  if (!yeni) return taze ? { kutu: iz, tutulan: true } : null;
-  let kose = yeni.kose;
-  if (taze) {
-    // köşe sırası kareler arasında dönebilir: eskiyle en iyi eşleşen döndürmeyi seç
-    let enIyi = null, enD = Infinity;
-    for (let r = 0; r < 4; r++) {
-      const k = kose.slice(r).concat(kose.slice(0, r));
-      const d = k.reduce((t, p, i) => t + Math.hypot(p.x - iz.kose[i].x, p.y - iz.kose[i].y), 0) / 4;
-      if (d < enD) { enD = d; enIyi = k; }
-    }
-    if (enD < ESLES_PX) kose = enIyi.map((p, i) => ({ x: YUMUSAK * p.x + (1 - YUMUSAK) * iz.kose[i].x, y: YUMUSAK * p.y + (1 - YUMUSAK) * iz.kose[i].y }));
+function koseEsle(yeni, eski) {
+  // köşe sırası kareler arasında dönebilir: eskiyle en iyi eşleşen döndürmeyi seç
+  let enIyi = yeni, enD = Infinity;
+  for (let r = 0; r < 4; r++) {
+    const k = yeni.slice(r).concat(yeni.slice(0, r));
+    const d = k.reduce((t, p, i) => t + Math.hypot(p.x - eski[i].x, p.y - eski[i].y), 0) / 4;
+    if (d < enD) { enD = d; enIyi = k; }
   }
-  iz = { ...yeni, kose, zaman: simdi };
-  return { kutu: iz, tutulan: false };
+  return [enIyi, enD];
+}
+
+const kenarUz = (k) => (Math.hypot(k[0].x - k[1].x, k[0].y - k[1].y) + Math.hypot(k[1].x - k[2].x, k[1].y - k[2].y)) / 2;
+const alanK = (k) => Math.abs(k.reduce((t, p, i) => { const q = k[(i + 1) % 4]; return t + p.x * q.y - q.x * p.y; }, 0)) / 2;
+
+function noktaSec(gri, kose) {
+  // kutu çokgeninin biraz genişletilmiş hali içinde izlenebilir köşe noktaları
+  const cx = kose.reduce((t, p) => t + p.x, 0) / 4, cy = kose.reduce((t, p) => t + p.y, 0) / 4;
+  const genis = kose.flatMap((p) => [Math.round(cx + (p.x - cx) * 1.2), Math.round(cy + (p.y - cy) * 1.2)]);
+  const maske = cv.Mat.zeros(gri.rows, gri.cols, cv.CV_8U), cm = cv.matFromArray(4, 1, cv.CV_32SC2, genis);
+  const mv = new cv.MatVector(), out = new cv.Mat();
+  try {
+    mv.push_back(cm); cv.fillPoly(maske, mv, new cv.Scalar(255));
+    cv.goodFeaturesToTrack(gri, out, 40, 0.01, 4, maske);
+    return Array.from(out.data32F);
+  } finally { maske.delete(); cm.delete(); mv.delete(); out.delete(); }
+}
+
+function akisIzle(gri) {
+  // önceki kare -> bu kare: noktaları LK ile taşı, homografiyle köşeleri güncelle
+  const n = kilit.pts.length / 2;
+  if (n < TAKIP.enAzNokta) return false;
+  const p0 = cv.matFromArray(n, 1, cv.CV_32FC2, kilit.pts), p1 = new cv.Mat(), st = new cv.Mat(), err = new cv.Mat();
+  const ic = new cv.Mat();
+  let a = null, b = null, H = null;
+  try {
+    cv.calcOpticalFlowPyrLK(oncekiGri, gri, p0, p1, st, err, new cv.Size(21, 21), 3);
+    const eski = [], yeni = [];
+    for (let i = 0; i < n; i++) if (st.data[i]) { eski.push(p0.data32F[2 * i], p0.data32F[2 * i + 1]); yeni.push(p1.data32F[2 * i], p1.data32F[2 * i + 1]); }
+    const m = eski.length / 2;
+    if (m < TAKIP.enAzNokta) return false;
+    a = cv.matFromArray(m, 1, cv.CV_32FC2, eski); b = cv.matFromArray(m, 1, cv.CV_32FC2, yeni);
+    H = cv.findHomography(a, b, cv.RANSAC, 3, ic);
+    if (H.empty()) return false;
+    const h = H.data64F;
+    const kose = kilit.kose.map(({ x, y }) => { const w = h[6] * x + h[7] * y + h[8]; return { x: (h[0] * x + h[1] * y + h[2]) / w, y: (h[3] * x + h[4] * y + h[5]) / w }; });
+    // akıl sağlığı: kare başına boyut çok değişmez
+    const oran = alanK(kose) / alanK(kilit.kose);
+    if (!(oran > 0.7 && oran < 1.4)) return false;
+    const pts = []; for (let i = 0; i < m; i++) if (ic.data[i]) pts.push(yeni[2 * i], yeni[2 * i + 1]);
+    kilit.kose = kose; kilit.pts = pts;
+    return true;
+  } finally { [p0, p1, st, err, ic].forEach((x) => x.delete()); if (a) a.delete(); if (b) b.delete(); if (H) H.delete(); }
+}
+
+function ekrandaMi(kose, w, h) {
+  return kose.filter((p) => p.x < 0 || p.y < 0 || p.x > w || p.y > h).length < 2;
+}
+
+function yeniKilit(tespit, gri, simdi) {
+  return { kose: tespit.kose, kont: tespit.kont, yontem: tespit.yontem, pts: noktaSec(gri, tespit.kose), dogrulandi: simdi, uyusmaz: 0 };
+}
+
+function takipEt(src, gri, simdi) {
+  // dönüş: { kutu, durum: "yeni" | "doğrulandı" | "takipte" | "doğrulanmadı" } | null
+  const w = src.cols, h = src.rows;
+  if (!$("kilitAc").checked) kilit = null;
+  if (kilit && oncekiGri && !akisIzle(gri)) { kilit = null; teshis.kilitBirakildi = "noktalar kayboldu"; }
+  if (kilit && !ekrandaMi(kilit.kose, w, h)) { kilit = null; teshis.kilitBirakildi = "ekrandan çıktı"; }
+
+  // tespit: kilitliyken kutunun çevresinde, değilken ortadaki çerçevede
+  let bolge = null;
+  if (kilit) {
+    const xs = kilit.kose.map((p) => p.x), ys = kilit.kose.map((p) => p.y), pay = kenarUz(kilit.kose) * 0.8;
+    const x0 = Math.max(0, Math.floor(Math.min(...xs) - pay)), y0 = Math.max(0, Math.floor(Math.min(...ys) - pay));
+    const x1 = Math.min(w, Math.ceil(Math.max(...xs) + pay)), y1 = Math.min(h, Math.ceil(Math.max(...ys) + pay));
+    if (x1 - x0 > 20 && y1 - y0 > 20) bolge = { x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
+  }
+  const tespit = kilit ? (bolge ? kutuBulBolge(src, bolge) : null) : kutuBulBolge(src);
+  bulmaOrani = 0.95 * bulmaOrani + 0.05 * (tespit ? 1 : 0);
+  teshis.takipBolge = bolge;
+
+  if (!kilit) {
+    if (!tespit) return null;
+    kilit = yeniKilit(tespit, gri, simdi);
+    return { kutu: kilit, durum: "yeni" };
+  }
+  if (tespit) {
+    const [esli, d] = koseEsle(tespit.kose, kilit.kose);
+    if (d < kenarUz(kilit.kose) * 0.35) {
+      const a = TAKIP.dogrulaHarmani;
+      kilit.kose = esli.map((p, i) => ({ x: a * p.x + (1 - a) * kilit.kose[i].x, y: a * p.y + (1 - a) * kilit.kose[i].y }));
+      kilit.kont = tespit.kont; kilit.yontem = tespit.yontem; kilit.dogrulandi = simdi; kilit.uyusmaz = 0;
+      if (kilit.pts.length / 2 < TAKIP.yenileAlti) kilit.pts = noktaSec(gri, kilit.kose);
+      return { kutu: kilit, durum: "doğrulandı" };
+    }
+    if (++kilit.uyusmaz > TAKIP.uyusmazSiniri) {
+      kilit = yeniKilit(tespit, gri, simdi);
+      return { kutu: kilit, durum: "yeni" };
+    }
+  }
+  if (kilit.pts.length / 2 < TAKIP.yenileAlti) kilit.pts = noktaSec(gri, kilit.kose);
+  return { kutu: kilit, durum: simdi - kilit.dogrulandi > TAKIP.bayatMs ? "doğrulanmadı" : "takipte" };
 }
 
 function telKafes(p, s, renk, kalinlik, kesik) {
@@ -365,15 +460,16 @@ function dongu() {
   ctx.drawImage(video, 0, 0, ekran.width, ekran.height);
   if (!cvHazir) { requestAnimationFrame(dongu); return; }
   islemCtx.drawImage(video, 0, 0, islemC.width, islemC.height);
-  const src = cv.imread(islemC);
+  const src = cv.imread(islemC), gri = new cv.Mat();
   teshis = { goruntu: [islemC.width, islemC.height] };
   maske2C.width = 0;
   const s = ekran.width / islemC.width;
   let bilgi = "", olcum = "";
   try {
-    const izl = izle(kutuBulBolge(src), simdi);
-    const kutu = izl && izl.kutu;
-    ctx.globalAlpha = izl && izl.tutulan ? 0.4 : 1;
+    cv.cvtColor(src, gri, cv.COLOR_RGBA2GRAY);
+    const tk = takipEt(src, gri, simdi);
+    const kutu = tk && tk.kutu;
+    ctx.globalAlpha = tk && tk.durum === "doğrulanmadı" ? 0.5 : 1;
     if (kutu) {
       const ustZ = kapakTakili ? G.kapakUst : G.duvarUst;
       const poz = pozBul(kutu.kose, islemC.width, islemC.height);
@@ -401,21 +497,24 @@ function dongu() {
         }
         const t = poz.tvec.data64F;
         teshis.tvec = Array.from(t).map((v) => +v.toFixed(1)); teshis.rvec = Array.from(poz.rvec.data64F).map((v) => +v.toFixed(3));
-        bilgi = (izl.tutulan ? "SON GÖRÜLEN · " : "") + `kutu: ${kutu.yontem}, uzaklık ${Math.hypot(t[0], t[1], t[2]).toFixed(0)} mm`;
+        bilgi = `${tk.durum.toUpperCase()} · kutu: ${kutu.yontem}, uzaklık ${Math.hypot(t[0], t[1], t[2]).toFixed(0)} mm`;
         poz.rvec.delete(); poz.tvec.delete(); poz.K.delete(); poz.D.delete();
       }
       // seçilen silüet (sarı ince): neyi kutu sandığını göster
       ctx.strokeStyle = "rgba(255,230,0,0.9)"; ctx.lineWidth = 1.5; ctx.beginPath();
       for (let j = 0; j < kutu.kont.length; j += 2) (j ? ctx.lineTo : ctx.moveTo).call(ctx, kutu.kont[j] * s, kutu.kont[j + 1] * s);
       ctx.closePath(); ctx.stroke();
-      teshis.yontem = kutu.yontem; teshis.kose = kutu.kose;
+      teshis.yontem = kutu.yontem; teshis.kose = kutu.kose; teshis.takip = tk.durum; teshis.nokta = kutu.pts.length / 2;
+      ctx.fillStyle = "rgba(120,255,120,0.8)";   // izlenen noktalar
+      for (let j = 0; j < kutu.pts.length; j += 2) ctx.fillRect(kutu.pts[j] * s - 2, kutu.pts[j + 1] * s - 2, 4, 4);
       ctx.fillStyle = "#36d6c3";
       for (const p of kutu.kose) { ctx.beginPath(); ctx.arc(p.x * s, p.y * s, 5, 0, 7); ctx.fill(); }
     } else bilgi = "kutu bulunamadı" + (teshis.reddedilen && teshis.reddedilen.length ? " (" + [...new Set(teshis.reddedilen)].join(", ") + ")" : ": çerçevenin içine al");
   } catch (e) { bilgi = "hata: " + (e.message || e); }
   ctx.globalAlpha = 1;
-  bilgi += ` · bulma %${Math.round(bulmaOrani * 100)}`;
-  { // arama çerçevesi
+  bilgi += ` · tespit %${Math.round(bulmaOrani * 100)}` + (kilit ? ` · ${kilit.pts.length / 2} nokta` : "") + (teshis.kilitBirakildi ? ` · kilit bırakıldı: ${teshis.kilitBirakildi}` : "");
+  if (gri.cols) { if (oncekiGri) oncekiGri.delete(); oncekiGri = gri; } else gri.delete();
+  if (!kilit) { // arama çerçevesi (yalnız kilit yokken)
     const b = aramaBolgesi(islemC.width, islemC.height);
     ctx.strokeStyle = "rgba(255,255,255,0.7)"; ctx.lineWidth = 2; ctx.setLineDash([12, 8]);
     ctx.strokeRect(b.x * s, b.y * s, b.w * s, b.h * s); ctx.setLineDash([]);
