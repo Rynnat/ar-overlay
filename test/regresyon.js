@@ -153,8 +153,10 @@ async function testler() {
   // 7) GERÇEK KARE (telefon, 2026-10-23): kapak duvarla aynı tonda (86/79), gölge %60, kareli kağıt.
   //    v1.10'da "şüpheli"ydi (gölge ile ayırt edilemiyordu). Beklenen kapak köşeleri gözle doğrulandı.
   {
-    const zlib = require("zlib");
-    const buf = zlib.gunzipSync(fs.readFileSync(path.join(__dirname, "veri", "gercek_01_golge_640x1138.rgba.gz")));
+    const zlib = require("zlib"), dosya = path.join(__dirname, "veri", "gercek_01_golge_640x1138.rgba.gz");
+    // gerçek kareler kullanıcının fotoğrafı: public repoya girmez (test/veri gitignore'da), yalnız bu makinede
+    if (!fs.existsSync(dosya)) { kontrol("gerçek kare dosyası mevcut", false, dosya); return; }
+    const buf = zlib.gunzipSync(fs.readFileSync(dosya));
     const src = new cv.Mat(1138, 640, cv.CV_8UC4); src.data.set(buf);
     const beklenen = [{ x: 294, y: 382 }, { x: 412, y: 377 }, { x: 433, y: 476 }, { x: 289, y: 486 }];
     for (const [ad, bolge] of [["orta çerçeve", undefined], ["kilitli bölge", { x: 200, y: 280, w: 340, h: 340 }]]) {
@@ -181,7 +183,8 @@ const go = async () => {
   try { await testler(); } catch (e) { sonuclar.push({ ad: "BEKLENMEYEN HATA", ok: false, ayrinti: (typeof e === "number" ? cv.exceptionFromPtr(e).msg : e.stack || e) }); }
   for (const s of sonuclar) console.log(`${s.ok ? "GEÇTİ  " : s.bilinen ? "BİLİNEN" : "KALDI  "} ${s.ad}${s.ayrinti !== undefined ? "  [" + s.ayrinti + "]" : ""}${!s.ok && s.bilinen ? "  — açık: " + s.bilinen : ""}`);
   const kalan = sonuclar.filter((s) => !s.ok && !s.bilinen).length;
-  console.log(kalan ? `\n${kalan} test KALDI — yayın yok` : `\nhepsi geçti (${sonuclar.length})`);
+  const acik = sonuclar.filter((s) => !s.ok && s.bilinen).length;
+  console.log(kalan ? `\n${kalan} test KALDI — yayın yok` : `\n${sonuclar.length - acik}/${sonuclar.length} geçti` + (acik ? `, ${acik} bilinen açık (yukarıda gerekçesiyle)` : ""));
   process.exit(kalan ? 1 : 0);
 };
 if (cv.getBuildInformation) go(); else cv.onRuntimeInitialized = go;
