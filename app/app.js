@@ -12,6 +12,8 @@ const G = {
   kup: 15,            // küp kenarı, ortada
 };
 const ISLEM_G = 640;  // işlem genişliği (px)
+const BOLGE = 0.6;              // arama çerçevesi: kısa kenarın oranı, ekran ortasında
+const UZAK = [120, 350];        // kabul edilen kamera-kutu uzaklığı (mm)
 
 const $ = (id) => document.getElementById(id);
 const ekran = $("ekran"), ctx = ekran.getContext("2d");
@@ -109,7 +111,29 @@ function koseSirala(pts) {
   return s.slice(bas).concat(s.slice(0, bas));
 }
 
-function kutuBul(src) {
+function aramaBolgesi(w, h) {
+  const a = Math.round(Math.min(w, h) * BOLGE);
+  return { x: Math.round((w - a) / 2), y: Math.round((h - a) / 2), w: a, h: a };
+}
+
+function kutuBulBolge(src) {
+  // yalnız ortadaki çerçevede ara; boyut, beklenen uzaklık aralığına uymalı
+  const b = aramaBolgesi(src.cols, src.rows);
+  const f = (src.cols / 2) / Math.tan((+$("fov").value * Math.PI / 180) / 2);
+  const kenar = (z) => f * G.dis / z;   // üst yüzün piksel kenarı
+  // silüet yan duvarlarla üst yüzden büyük görünebilir -> üst sınırda pay
+  const alan = [kenar(UZAK[1]) ** 2 * 0.7, (kenar(UZAK[0]) * 1.8) ** 2];
+  teshis.bolge = b; teshis.alanAraligi = alan.map(Math.round);
+  const parca = src.roi(new cv.Rect(b.x, b.y, b.w, b.h));
+  let k;
+  try { k = kutuBul(parca, alan); } finally { parca.delete(); }
+  if (!k) return null;
+  k.kose = k.kose.map((p) => ({ x: p.x + b.x, y: p.y + b.y }));
+  k.kont = k.kont.map((v, i) => v + (i % 2 ? b.y : b.x));
+  return k;
+}
+
+function kutuBul(src, alan) {
   // koyu nesne (kutu + kapak) beyaz kağıt üzerinde -> en büyük dörtgen
   const gri = new cv.Mat(), ikili = new cv.Mat(), kont = new cv.MatVector(), hiy = new cv.Mat();
   let sonuc = null;
@@ -124,11 +148,18 @@ function kutuBul(src) {
     cv.morphologyEx(ikili, ikili, cv.MORPH_CLOSE, k); k.delete();
     if (maskeCiz()) cv.imshow(maskeC, ikili);
     cv.findContours(ikili, kont, hiy, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE);
-    let enIyi = -1, enAlan = src.rows * src.cols * 0.003;
+    let enIyi = -1, enAlan = alan[0], reddedilen = [];
     for (let i = 0; i < kont.size(); i++) {
-      const a = cv.contourArea(kont.get(i));
-      if (a > enAlan && a < src.rows * src.cols * 0.8) { enAlan = a; enIyi = i; }
+      const c = kont.get(i), a = cv.contourArea(c);
+      if (a < 100) continue;
+      const r = cv.boundingRect(c);
+      const kenaraDegiyor = r.x <= 1 || r.y <= 1 || r.x + r.width >= src.cols - 1 || r.y + r.height >= src.rows - 1;
+      if (kenaraDegiyor) { reddedilen.push("çerçeveye değiyor"); continue; }
+      if (a > alan[1]) { reddedilen.push("çok büyük/yakın"); continue; }
+      if (a < alan[0]) { if (a > alan[0] * 0.3) reddedilen.push("çok küçük/uzak"); continue; }
+      if (a > enAlan) { enAlan = a; enIyi = i; }
     }
+    teshis.reddedilen = reddedilen;
     if (enIyi >= 0) {
       const c = kont.get(enIyi), yak = new cv.Mat();
       const silAlan = enAlan;
@@ -262,7 +293,7 @@ function dongu() {
   const s = ekran.width / islemC.width;
   let bilgi = "", olcum = "";
   try {
-    const kutu = kutuBul(src);
+    const kutu = kutuBulBolge(src);
     if (kutu) {
       const ustZ = kapakTakili ? G.kapakUst : G.duvarUst;
       const poz = pozBul(kutu.kose, islemC.width, islemC.height);
@@ -300,8 +331,15 @@ function dongu() {
       teshis.yontem = kutu.yontem; teshis.kose = kutu.kose;
       ctx.fillStyle = "#36d6c3";
       for (const p of kutu.kose) { ctx.beginPath(); ctx.arc(p.x * s, p.y * s, 5, 0, 7); ctx.fill(); }
-    } else bilgi = "kutu bulunamadı (beyaz kağıt üstünde mi?)";
+    } else bilgi = "kutu bulunamadı" + (teshis.reddedilen && teshis.reddedilen.length ? " (" + [...new Set(teshis.reddedilen)].join(", ") + ")" : ": çerçevenin içine al");
   } catch (e) { bilgi = "hata: " + (e.message || e); }
+  { // arama çerçevesi
+    const b = aramaBolgesi(islemC.width, islemC.height);
+    ctx.strokeStyle = "rgba(255,255,255,0.7)"; ctx.lineWidth = 2; ctx.setLineDash([12, 8]);
+    ctx.strokeRect(b.x * s, b.y * s, b.w * s, b.h * s); ctx.setLineDash([]);
+    ctx.fillStyle = "rgba(255,255,255,0.8)"; ctx.font = `${Math.round(14 * s)}px system-ui`;
+    ctx.fillText(`kutuyu buraya al · ${UZAK[0] / 10}-${UZAK[1] / 10} cm`, b.x * s, b.y * s - 6 * s);
+  }
   src.delete();
   $("olcum").textContent = olcum;
   teshis.durum = bilgi;
