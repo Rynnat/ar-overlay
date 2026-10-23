@@ -133,6 +133,19 @@ function kutuBulBolge(src) {
   return k;
 }
 
+function kenarMedyan(gri) {
+  // 4 px'lik kenar şeridinin medyan parlaklığı
+  const w = gri.cols, h = gri.rows, d = gri.data, hist = new Array(256).fill(0);
+  let n = 0;
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    if (x >= 4 && x < w - 4 && y >= 4 && y < h - 4) { x = w - 5; continue; }
+    hist[d[y * w + x]]++; n++;
+  }
+  let say = 0;
+  for (let i = 0; i < 256; i++) { say += hist[i]; if (say >= n / 2) return i; }
+  return 255;
+}
+
 function kutuBul(src, alan) {
   // koyu nesne (kutu + kapak) beyaz kağıt üzerinde -> en büyük dörtgen
   const gri = new cv.Mat(), ikili = new cv.Mat(), kont = new cv.MatVector(), hiy = new cv.Mat();
@@ -141,9 +154,17 @@ function kutuBul(src, alan) {
     cv.cvtColor(src, gri, cv.COLOR_RGBA2GRAY);
     cv.GaussianBlur(gri, gri, new cv.Size(5, 5), 0);
     const oto = $("otomatik").checked;
-    const t = cv.threshold(gri, ikili, +$("esik").value, 255, cv.THRESH_BINARY_INV | (oto ? cv.THRESH_OTSU : 0));
+    // sahnede 3 ton var (kağıt, gri kapak, siyah duvar); Otsu bazen gri ile siyahı ayırıyor.
+    // Kutu çerçeve kenarına değemez -> kenar şeridi = kağıt; eşiği kağıdın parlaklığından kur.
+    let t = +$("esik").value;
+    if (oto) {
+      const kagit = kenarMedyan(gri);
+      t = Math.round(kagit * 0.8);   // metalik kapak kağıda yakın parlayabiliyor
+      teshis.kagit = kagit;
+      $("esik").value = t; $("esikV").textContent = t;
+    }
+    cv.threshold(gri, ikili, t, 255, cv.THRESH_BINARY_INV);
     teshis.esik1 = t;
-    if (oto) { $("esik").value = Math.round(t); $("esikV").textContent = Math.round(t); }
     const k = cv.getStructuringElement(cv.MORPH_RECT, new cv.Size(7, 7));
     cv.morphologyEx(ikili, ikili, cv.MORPH_CLOSE, k); k.delete();
     if (maskeCiz()) cv.imshow(maskeC, ikili);
