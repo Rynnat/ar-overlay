@@ -31,7 +31,8 @@ let kayitAcik = false, kayitSon = 0, kayitSayi = 0, teshis = {};
 const KAYIT_ARALIK = 3000;   // ms
 // GitHub Pages'ten açılınca kayıtlar laptoptaki server.py'ye gider (aynı Wi-Fi)
 const KAYIT_ADRES = location.hostname.endsWith("github.io") ? "https://192.168.1.185:8443/kayit" : "kayit";
-const maskeCiz = () => maskeGoster || kayitAcik;
+let tekKare = false;   // Teşhis düğmesi: bir karede maskeleri çiz, sonra kolaj yap
+const maskeCiz = () => maskeGoster || kayitAcik || tekKare;
 
 function cvYuklendi() {
   const bitti = () => { cvHazir = true; durum("OpenCV hazır. Kamerayı başlat."); };
@@ -99,6 +100,30 @@ async function kaydet() {
     kayitAcik = false; $("kayit").classList.remove("aktif"); $("kayit").textContent = "Kayıt";
     kayitHata = "Kayıt gönderilemedi: " + e.message + " (aynı Wi-Fi'da mısın? önce https://192.168.1.185:8443 adresini bir kez açıp uyarıyı geç)";
   } finally { kayitGidiyor = false; }
+}
+
+$("teshis").onclick = () => { if (akis) tekKare = true; };
+
+async function teshisPaylas() {
+  // ekran + silüet maskesi + kapak maskesi + sayılar -> tek PNG -> paylaş menüsü
+  const W = ekran.width, mw = Math.round(W / 2), mh = Math.round(mw * maskeC.height / maskeC.width);
+  const satirlar = JSON.stringify({ ...teshis, kapakTakili, fov: +$("fov").value }, (k, v) =>
+    typeof v === "number" ? Math.round(v * 10) / 10 : v).match(/.{1,70}/g) || [];
+  const yazi = 22, H = ekran.height + mh + 20 + satirlar.length * (yazi + 6);
+  const k = document.createElement("canvas"); k.width = W; k.height = H;
+  const c = k.getContext("2d");
+  c.fillStyle = "#000"; c.fillRect(0, 0, W, H);
+  c.drawImage(ekran, 0, 0);
+  if (maskeC.width) c.drawImage(maskeC, 0, ekran.height, mw, mh);
+  if (maske2C.width) c.drawImage(maske2C, mw, ekran.height, mw, mh);
+  c.fillStyle = "#fff"; c.font = `${yazi}px monospace`;
+  satirlar.forEach((t, i) => c.fillText(t, 8, ekran.height + mh + 14 + (i + 1) * (yazi + 6)));
+  const blob = await new Promise((ok) => k.toBlob(ok, "image/png"));
+  const dosya = new File([blob], "teshis.png", { type: "image/png" });
+  try {
+    if (navigator.canShare && navigator.canShare({ files: [dosya] })) { await navigator.share({ files: [dosya] }); return; }
+  } catch (e) { if (e.name === "AbortError") return; }
+  const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = "teshis.png"; a.click();
 }
 
 for (const [id, v] of [["esik", "esikV"], ["fov", "fovV"]]) $(id).oninput = () => ($(v).textContent = $(id).value);
@@ -238,7 +263,7 @@ function ustYuzBul(gri, c, silAlan) {
     cv.morphologyEx(acik, acik, cv.MORPH_OPEN, k);
     cv.dilate(acik, acik, k); cv.bitwise_and(acik, silTam, acik);   // aşındırma kaymasını geri al
     k.delete(); silTam.delete();
-    if (kayitAcik) { maske2C.width = acik.cols; maske2C.height = acik.rows; cv.imshow(maske2C, acik); }
+    if (kayitAcik || tekKare) { maske2C.width = acik.cols; maske2C.height = acik.rows; cv.imshow(maske2C, acik); }
     cv.findContours(acik, kont, hiy, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE);
     let enIyi = -1, enAlan = silAlan * 0.25;
     for (let i = 0; i < kont.size(); i++) { const a = cv.contourArea(kont.get(i)); if (a > enAlan) { enAlan = a; enIyi = i; } }
@@ -366,6 +391,7 @@ function dongu() {
   src.delete();
   $("olcum").textContent = olcum;
   teshis.durum = bilgi;
+  if (tekKare) { tekKare = false; teshisPaylas(); }
   if (kayitAcik && simdi - kayitSon > KAYIT_ARALIK) { kayitSon = simdi; kaydet(); }
   durum(`${bilgi}\nFPS ${fps.toFixed(0)} · görüntü ${ekran.width}×${ekran.height}` + (kayitAcik ? ` · kayıt ${kayitSayi}` : "") + (kayitHata ? "\n" + kayitHata : ""));
   requestAnimationFrame(dongu);
