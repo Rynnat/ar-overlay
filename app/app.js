@@ -11,7 +11,7 @@ const G = {
   kapakUst: 26,       // kapak takılıyken üst yüz
   kup: 15,            // küp kenarı, ortada
 };
-const SURUM = "v0.7";   // her yayında artır; ekranda görünür (doğru sürüm mü kontrolü)
+const SURUM = "v0.8";   // her yayında artır; ekranda görünür (doğru sürüm mü kontrolü)
 const ISLEM_G = 640;  // işlem genişliği (px)
 const BOLGE = 0.6;              // arama çerçevesi: kısa kenarın oranı, ekran ortasında
 const UZAK = [120, 350];        // kabul edilen kamera-kutu uzaklığı (mm)
@@ -596,10 +596,12 @@ function dongu() {
         bilgi = `${tk.durum.toUpperCase()} · kutu: ${kutu.yontem}, uzaklık ${Math.hypot(t[0], t[1], t[2]).toFixed(0)} mm`;
         poz.rvec.delete(); poz.tvec.delete(); poz.K.delete(); poz.D.delete();
       }
-      // seçilen silüet (sarı ince): neyi kutu sandığını göster
+      // seçilen silüet (sarı ince): tespitin BU karede gördüğü sınır; yalnız takip varken çizme (eski yerde asılı kalır)
+      if (tk.durum === "yeni" || tk.durum === "doğrulandı") {
       ctx.strokeStyle = "rgba(255,230,0,0.9)"; ctx.lineWidth = 1.5; ctx.beginPath();
       for (let j = 0; j < kutu.kont.length; j += 2) (j ? ctx.lineTo : ctx.moveTo).call(ctx, kutu.kont[j] * s, kutu.kont[j + 1] * s);
       ctx.closePath(); ctx.stroke();
+      }
       teshis.yontem = kutu.yontem; teshis.kose = kutu.kose; teshis.takip = tk.durum; teshis.nokta = kutu.pts.length / 2;
       ctx.fillStyle = "rgba(120,255,120,0.8)";   // izlenen noktalar
       for (let j = 0; j < kutu.pts.length; j += 2) ctx.fillRect(kutu.pts[j] * s - 2, kutu.pts[j + 1] * s - 2, 4, 4);
