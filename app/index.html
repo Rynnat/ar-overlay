@@ -5,88 +5,42 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Kutu Overlay</title>
 <style>
-  :root { --bg:#0d0f12; --fg:#e8ebef; --soluk:#8a929c; --vurgu:#36d6c3; --uyari:#ffb347; }
   * { box-sizing: border-box; }
-  body { margin:0; background:var(--bg); color:var(--fg); font:14px system-ui, sans-serif; }
-  #sahne { position:relative; width:100%; }
-  canvas#ekran { width:100%; display:block; background:#000; }
-  canvas#maske { position:absolute; right:8px; top:8px; width:28%; border:1px solid var(--soluk); display:none; }
-  #panel { padding:10px max(12px, env(safe-area-inset-left)); display:grid; gap:10px; }
-  .satir { display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
-  button, select { background:#1d232b; color:var(--fg); border:1px solid #2f3842; border-radius:8px; padding:10px 14px; font-size:15px; }
-  button.aktif { border-color:var(--vurgu); color:var(--vurgu); }
-  label { display:flex; gap:8px; align-items:center; width:100%; }
-  label.kucuk { width:auto; }
-  input[type=range] { flex:1; }
-  details { border:1px solid #2f3842; border-radius:8px; padding:8px 10px; }
-  summary { color:var(--soluk); cursor:pointer; }
-  #durum { font-family:ui-monospace, monospace; font-size:13px; color:var(--soluk); white-space:pre-line; }
-  #olcum { font-family:ui-monospace, monospace; font-size:17px; color:var(--uyari); min-height:1.4em; }
-  #olcumSonuc { font-family:ui-monospace, monospace; font-size:13px; color:var(--fg); white-space:pre-line; }
-  #kalibDurum { font-family:ui-monospace, monospace; font-size:12px; color:var(--soluk); }
+  html, body { margin:0; height:100%; background:#000; overflow:hidden; font:14px system-ui, sans-serif; }
+  canvas#ekran { position:fixed; inset:0; width:100vw; height:100vh; object-fit:contain; background:#000; }
+  #kamera { position:fixed; left:50%; bottom:calc(24px + env(safe-area-inset-bottom)); transform:translateX(-50%);
+    width:72px; height:72px; border-radius:50%; border:3px solid #fff; background:rgba(0,0,0,.35); color:#fff;
+    font-size:13px; font-weight:600; }
+  #kamera.acik { background:#e5484d; border-color:#e5484d; }
+  #surum { position:fixed; top:calc(8px + env(safe-area-inset-top)); left:10px; color:rgba(255,255,255,.6); font:600 12px ui-monospace, monospace; }
+  /* uygulamanın iç durumu: görünmez, değerleri kod ve kayıt kullanır */
+  #gizli { display:none; }
 </style>
 </head>
 <body>
-<div id="sahne">
-  <canvas id="ekran"></canvas>
+<canvas id="ekran"></canvas>
+<span id="surum"></span>
+<button id="kamera">Aç</button>
+
+<div id="gizli">
   <canvas id="maske"></canvas>
+  <button id="basla"></button>
+  <select id="mod"><option value="aruco">aruco</option><option value="markersiz">markersiz</option><option value="ikisi" selected>ikisi</option></select>
+  <button id="kapak" class="aktif">Kapak: takılı</button>
+  <input id="otoAc" type="checkbox" checked>
+  <button id="olc">Ölç</button>
+  <button id="teshis"></button>
+  <button id="kameraKilit"></button>
+  <div id="olcum"></div><div id="olcumSonuc"></div><div id="durum"></div>
+  <button id="kalibEkle"></button><button id="kalibHesapla"></button><button id="kalibSifirla"></button><div id="kalibDurum"></div>
+  <input id="anahtar"><button id="anahtarKaydet"></button><div id="kayitDurum"></div>
+  <input id="yumusat" type="checkbox" checked><input id="kilitAc" type="checkbox" checked>
+  <button id="kilitBirak"></button><button id="maskeBtn"></button>
+  <input id="esik" type="range" min="20" max="230" value="110"><span id="esikV"></span><input id="otomatik" type="checkbox" checked>
+  <input id="fov" type="range" min="45" max="85" value="65"><span id="fovV"></span>
 </div>
-<div id="panel">
-  <div class="satir">
-    <span id="surum" style="color:var(--vurgu);font:600 15px ui-monospace,monospace"></span>
-    <button id="basla">Kamerayı başlat</button>
-    <select id="mod">
-      <option value="aruco">Poz: taban ArUco</option>
-      <option value="markersiz">Poz: markersız</option>
-      <option value="ikisi" selected>Poz: ikisi (kıyas)</option>
-    </select>
-    <button id="kapak" class="aktif">Kapak: takılı</button>
-  </div>
-  <div class="satir">
-    <label class="kucuk"><input id="otoAc" type="checkbox" checked> Otomatik</label>
-    <button id="olc">Ölç (300 kare)</button>
-    <button id="teshis">Teşhis</button>
-    <button id="kameraKilit">Kamerayı kilitle</button>
-  </div>
-  <div id="olcum"></div>
-  <div id="olcumSonuc"></div>
-  <div id="durum">OpenCV yükleniyor…</div>
-  <details>
-    <summary>Kalibrasyon (taban plakasıyla)</summary>
-    <p style="margin:8px 0 0;font-size:13px">Marker sayfası: <a style="color:var(--vurgu)" href="../asama0/v3/marker_sayfasi.html" target="_blank">yazdır (%100, ölçeksiz)</a> · cetvel 100 mm değilse kullanma</p>
-    <div class="satir" style="margin-top:8px">
-      <button id="kalibEkle">Kalib: görüntü ekle (0)</button>
-      <button id="kalibHesapla">Hesapla</button>
-      <button id="kalibSifirla">Sıfırla</button>
-    </div>
-    <div id="kalibDurum"></div>
-  </details>
-  <details>
-    <summary>Kayıt (otomatik, GitHub)</summary>
-    <p style="margin:8px 0;font-size:13px;line-height:1.5">Bir kerelik: <a style="color:var(--vurgu)" target="_blank"
-      href="https://github.com/settings/personal-access-tokens/new?name=ar-overlay-kayit&description=ar-overlay+otomatik+kay%C4%B1t&target_name=Rynnat&expires_in=90&contents=write">GitHub anahtarı oluştur</a>
-      → Repository access: <b>Only select repositories → ar-overlay-kayit</b> → Permissions: <b>Contents: Read and write</b> → Generate → kopyala, aşağı yapıştır.</p>
-    <div class="satir">
-      <input id="anahtar" type="password" placeholder="github_pat_…" autocomplete="off" style="flex:1;min-width:0;background:#1d232b;color:var(--fg);border:1px solid #2f3842;border-radius:8px;padding:10px">
-      <button id="anahtarKaydet">Kaydet</button>
-    </div>
-    <div id="kayitDurum" style="font-family:ui-monospace,monospace;font-size:12px;color:var(--soluk);margin-top:6px"></div>
-  </details>
-  <details>
-    <summary>Ayarlar</summary>
-    <div class="satir" style="margin-top:8px">
-      <label class="kucuk"><input id="yumusat" type="checkbox" checked> Yumuşat (yalnız çizim)</label>
-      <label class="kucuk"><input id="kilitAc" type="checkbox" checked> Kilit + takip</label>
-      <button id="kilitBirak">Kilidi bırak</button>
-      <button id="maskeBtn">Maske</button>
-    </div>
-    <label>Eşik <input id="esik" type="range" min="20" max="230" value="110"><span id="esikV">110</span>
-      <input id="otomatik" type="checkbox" checked> oto</label>
-    <label>Görüş açısı° <input id="fov" type="range" min="45" max="85" value="65"><span id="fovV">65</span></label>
-  </details>
-</div>
-<script src="kayit.js?v=1.6"></script>
-<script src="app.js?v=1.6"></script>
+<script src="kayit.js?v=1.7"></script>
+<script src="app.js?v=1.7"></script>
 <script async src="vendor/opencv.js" onload="cvYuklendi()"></script>
 </body>
 </html>

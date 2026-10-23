@@ -14,7 +14,11 @@ const kayitDurum = { anahtar: null, oturum: null, sira: 0, gonderilen: 0, hata: 
 let kareTampon = [], sonKareLog = 0, sonGonderim = 0, oturumBas = 0;
 
 function anahtarYukle() {
-  try { kayitDurum.anahtar = localStorage.getItem("ghToken") || null; } catch (e) { kayitDurum.anahtar = null; }
+  // ayar ekranı yok: anahtar bir kez adresle gelir (#anahtar=...), kaydedilir ve adresten silinir
+  const m = location.hash.match(/anahtar=([^&]+)/);
+  if (m) { try { localStorage.setItem("ghToken", decodeURIComponent(m[1])); } catch (e) { /* özel pencere */ } history.replaceState(null, "", location.pathname + location.search); }
+  try { kayitDurum.anahtar = localStorage.getItem("ghToken") || (m && decodeURIComponent(m[1])) || null; } catch (e) { kayitDurum.anahtar = m ? decodeURIComponent(m[1]) : null; }
+  if (kayitDurum.anahtar) anahtarDene();
   kayitYazDurum();
 }
 function anahtarKaydet(t) {

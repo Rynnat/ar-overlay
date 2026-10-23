@@ -4,7 +4,7 @@
 // Ölçüm her zaman HAM pozdan; 1€ filtresi yalnız çizimde. "Ölç" modu sabit telefonda titremeyi sayıyla verir.
 // Geometri: ../asama0/v2/geometri.json (kutu), ../asama0/v3/geometri_v3.json (taban). mm, iç taban z=0, +z kameraya.
 
-const SURUM = "v1.6";   // her yayında artır; ekranda görünür (doğru sürüm mü kontrolü)
+const SURUM = "v1.7";   // her yayında artır; ekranda görünür (doğru sürüm mü kontrolü)
 
 const G = {
   dis: 30,            // kutu dış kenar (kapak da 30)
@@ -63,12 +63,22 @@ async function kameraBaslat() {
   islemC.width = ISLEM_G; islemC.height = Math.round(ISLEM_G * video.videoHeight / video.videoWidth);
   maskeC.width = islemC.width; maskeC.height = islemC.height;
   $("basla").textContent = "Çalışıyor";
+  $("kamera").textContent = "Kapat"; $("kamera").classList.add("acik");
   oturumBaslat({ surum: SURUM, mod: mod(), kamera: kameraBilgisi(), kalib, fov: +$("fov").value, jig: "etiketsiz",
     parametreler: { G, TABAN, ISLEM_G, BOLGE, UZAK, OLCUM_KARE, TAKIP, FILTRE, OTO, HAM, KAYIT, POZ_SICRAMA_DER } });
   kareBekle();
 }
 $("basla").onclick = kameraBaslat;
-// sayfa açılınca dene; tarayıcı dokunuş isterse düğme yedek olarak kalır
+function kameraDurdur() {
+  if (!akis) return;
+  akis.getTracks().forEach((t) => t.stop()); akis = null; video.srcObject = null;
+  olayLog("kamera-kapandi", {}); tamponGonder();
+  kilit = null; oncekiPoz = null; olcum = null; kameraKilitlendi = false; oto.pozIlk = null; oto.iz = [];
+  ctx.fillStyle = "#000"; ctx.fillRect(0, 0, ekran.width, ekran.height);
+  $("kamera").textContent = "Aç"; $("kamera").classList.remove("acik");
+}
+$("kamera").onclick = () => (akis ? kameraDurdur() : kameraBaslat());
+// sayfa açılınca dene; tarayıcı dokunuş isterse düğme kalır
 kameraBaslat();
 // kamera karesi gelince işle (requestVideoFrameCallback); yoksa ekran tazelemesine bağlı
 function kareBekle() {
@@ -1007,6 +1017,7 @@ function kapakOtomatik(kirmiziIcerde) {
 
 // ====================== ANA DÖNGÜ ======================
 function dongu(meta) {
+  if (!akis) return;
   const simdi = performance.now(); fps = 0.9 * fps + 0.1 * (1000 / (simdi - sonZaman)); sonZaman = simdi;
   const tKare = meta && meta.captureTime ? meta.captureTime : simdi;   // 1€ için kare zamanı
   ctx.drawImage(video, 0, 0, ekran.width, ekran.height);
