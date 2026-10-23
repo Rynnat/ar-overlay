@@ -160,6 +160,13 @@ function kutuBulBolge(src) {
   return k;
 }
 
+function enBuyukKontur(kont, enAlan) {
+  // MatVector.get() her çağrıda silinmesi gereken yeni bir Mat döndürür
+  let enIyi = -1;
+  for (let i = 0; i < kont.size(); i++) { const c = kont.get(i), a = cv.contourArea(c); c.delete(); if (a > enAlan) { enAlan = a; enIyi = i; } }
+  return [enIyi, enAlan];
+}
+
 function kenarMedyan(gri) {
   // 4 px'lik kenar şeridinin medyan parlaklığı
   const w = gri.cols, h = gri.rows, d = gri.data, hist = new Array(256).fill(0);
@@ -199,8 +206,8 @@ function kutuBul(src, alan) {
     let enIyi = -1, enAlan = alan[0], reddedilen = [];
     for (let i = 0; i < kont.size(); i++) {
       const c = kont.get(i), a = cv.contourArea(c);
+      const r = cv.boundingRect(c); c.delete();
       if (a < 100) continue;
-      const r = cv.boundingRect(c);
       const kenaraDegiyor = r.x <= 1 || r.y <= 1 || r.x + r.width >= src.cols - 1 || r.y + r.height >= src.rows - 1;
       if (kenaraDegiyor) { reddedilen.push("çerçeveye değiyor"); continue; }
       if (a > alan[1]) { reddedilen.push("çok büyük/yakın"); continue; }
@@ -214,7 +221,7 @@ function kutuBul(src, alan) {
       teshis.silAlan = silAlan; teshis.silKont = c.data32S.length / 2;
       // önce gri kapağı ara: silüet içinde siyah duvardan açık kalan bölge = üst yüz
       const ust = kapakTakili ? ustYuzBul(gri, c, silAlan) : null;
-      if (ust) { yak.delete(); return { kose: koseSirala(ust), yontem: "gri kapak", kont: c.data32S.slice() }; }
+      if (ust) { yak.delete(); const kd = c.data32S.slice(); c.delete(); return { kose: koseSirala(ust), yontem: "gri kapak", kont: kd }; }
       cv.approxPolyDP(c, yak, 0.04 * cv.arcLength(c, true), true);
       let pts = [], yontem;
       if (yak.rows === 4 && cv.isContourConvex(yak)) {
@@ -227,6 +234,7 @@ function kutuBul(src, alan) {
       }
       yak.delete();
       sonuc = { kose: koseSirala(pts), yontem: "silüet, " + yontem, kont: c.data32S.slice() };
+      c.delete();
     }
   } finally { gri.delete(); ikili.delete(); kont.delete(); hiy.delete(); }
   return sonuc;
@@ -265,11 +273,10 @@ function ustYuzBul(gri, c, silAlan) {
     k.delete(); silTam.delete();
     if (kayitAcik || tekKare) { maske2C.width = acik.cols; maske2C.height = acik.rows; cv.imshow(maske2C, acik); }
     cv.findContours(acik, kont, hiy, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE);
-    let enIyi = -1, enAlan = silAlan * 0.25;
-    for (let i = 0; i < kont.size(); i++) { const a = cv.contourArea(kont.get(i)); if (a > enAlan) { enAlan = a; enIyi = i; } }
+    const [enIyi, enAlan] = enBuyukKontur(kont, silAlan * 0.25);
     if (enIyi < 0) { teshis.kapak.red = "yeterli büyük açık bölge yok"; return null; }
     const ck = kont.get(enIyi);
-    cv.approxPolyDP(ck, yak, 0.04 * cv.arcLength(ck, true), true);
+    cv.approxPolyDP(ck, yak, 0.04 * cv.arcLength(ck, true), true); ck.delete();
     teshis.kapak.alan = enAlan; teshis.kapak.koseSayi = yak.rows;
     if (yak.rows !== 4 || !cv.isContourConvex(yak)) return null;
     const pts = []; for (let i = 0; i < 4; i++) pts.push({ x: yak.data32S[i * 2], y: yak.data32S[i * 2 + 1] });
@@ -287,11 +294,11 @@ function kirmiziBul(src) {
     cv.inRange(hsv, a1, b1, m1); cv.inRange(hsv, a2, b2, m2); cv.bitwise_or(m1, m2, m1);
     [a1, b1, a2, b2].forEach((m) => m.delete());
     cv.findContours(m1, kont, hiy, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE);
-    let enIyi = -1, enAlan = 60;
-    for (let i = 0; i < kont.size(); i++) { const a = cv.contourArea(kont.get(i)); if (a > enAlan) { enAlan = a; enIyi = i; } }
+    const [enIyi] = enBuyukKontur(kont, 60);
     if (enIyi >= 0) {
-      const mo = cv.moments(kont.get(enIyi));
-      sonuc = { x: mo.m10 / mo.m00, y: mo.m01 / mo.m00, kont: kont.get(enIyi).data32S.slice() };
+      const ck = kont.get(enIyi), mo = cv.moments(ck);
+      sonuc = { x: mo.m10 / mo.m00, y: mo.m01 / mo.m00, kont: ck.data32S.slice() };
+      ck.delete();
     }
   } finally { hsv.delete(); m1.delete(); m2.delete(); kont.delete(); hiy.delete(); }
   return sonuc;
