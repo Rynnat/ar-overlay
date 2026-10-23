@@ -4,7 +4,7 @@
 // Ölçüm her zaman HAM pozdan; 1€ filtresi yalnız çizimde. "Ölç" modu sabit telefonda titremeyi sayıyla verir.
 // Geometri: ../asama0/v2/geometri.json (kutu), ../asama0/v3/geometri_v3.json (taban). mm, iç taban z=0, +z kameraya.
 
-const SURUM = "v1.9";   // her yayında artır; ekranda görünür (doğru sürüm mü kontrolü)
+const SURUM = "v1.10";   // her yayında artır; ekranda görünür (doğru sürüm mü kontrolü)
 
 const G = {
   dis: 30,            // kutu dış kenar (kapak da 30)
@@ -124,6 +124,7 @@ $("maskeBtn").onclick = (e) => {
 };
 $("kilitBirak").onclick = () => { kilit = null; };
 $("teshis").onclick = () => { if (akis) tekKare = true; };
+$("foto").onclick = () => { if (akis) tekKare = true; };
 for (const [id, v] of [["esik", "esikV"], ["fov", "fovV"]]) $(id).oninput = () => ($(v).textContent = $(id).value);
 
 // --- telefon hareketi: jiroskop + ivme, kareler arasında özetlenir ---
@@ -185,22 +186,24 @@ async function paylas(blob, ad) {
 }
 
 async function teshisPaylas() {
-  // ekran + silüet maskesi + kapak maskesi + sayılar -> tek PNG
-  const W = ekran.width, mw = Math.round(W / 2), mh = Math.round(mw * maskeC.height / maskeC.width);
+  // bindirmeli ekran + ham kare + silüet maskesi + kapak maskesi + sayılar -> tek görsel (sohbete eklenecek)
+  const W = ekran.width, mw = Math.round(W / 2), mh = maskeC.width ? Math.round(mw * maskeC.height / maskeC.width) : 0;
+  const hamH = Math.round(W * video.videoHeight / video.videoWidth);
   const satirlar = JSON.stringify({ surum: SURUM, mod: mod(), ...teshis, kapakTakili, fov: +$("fov").value, kalib: !!kalib }, (k, v) =>
     typeof v === "number" ? Math.round(v * 10) / 10 : v).match(/.{1,70}/g) || [];
-  const yazi = 22, H = ekran.height + mh + 20 + satirlar.length * (yazi + 6);
+  const yazi = 22, ustH = ekran.height + hamH, H = ustH + mh + 20 + satirlar.length * (yazi + 6);
   const k = document.createElement("canvas"); k.width = W; k.height = H;
   const c = k.getContext("2d");
   c.fillStyle = "#000"; c.fillRect(0, 0, W, H);
   c.drawImage(ekran, 0, 0);
-  if (maskeC.width) c.drawImage(maskeC, 0, ekran.height, mw, mh);
-  if (maske2C.width) c.drawImage(maske2C, mw, ekran.height, mw, mh);
+  c.drawImage(video, 0, ekran.height, W, hamH);   // ham kare (çizimsiz)
+  if (maskeC.width) c.drawImage(maskeC, 0, ustH, mw, mh);
+  if (maske2C.width) c.drawImage(maske2C, mw, ustH, mw, mh);
   c.fillStyle = "#fff"; c.font = `${yazi}px monospace`;
-  satirlar.forEach((t, i) => c.fillText(t, 8, ekran.height + mh + 14 + (i + 1) * (yazi + 6)));
-  const blob = await new Promise((ok) => k.toBlob(ok, "image/png"));
-  if (kayitDurum.anahtar) { blobYukle("teshis.png", blob); jsonYukle("teshis", { surum: SURUM, mod: mod(), teshis, kapakTakili, kalib }); $("olcum").textContent = "teşhis kayda gönderildi"; }
-  else await paylas(blob, "teshis.png");
+  satirlar.forEach((t, i) => c.fillText(t, 8, ustH + mh + 14 + (i + 1) * (yazi + 6)));
+  const blob = await new Promise((ok) => k.toBlob(ok, "image/jpeg", 0.9));
+  if (kayitDurum.anahtar) { blobYukle("teshis.jpg", blob); jsonYukle("teshis", { surum: SURUM, mod: mod(), teshis, kapakTakili, kalib }); }
+  await paylas(blob, `foto-${SURUM}-${Date.now()}.jpg`);
 }
 
 // --- küçük 3B yardımcılar (Mat açmadan) ---
