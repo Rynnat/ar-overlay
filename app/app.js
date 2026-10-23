@@ -4,7 +4,7 @@
 // Ölçüm her zaman HAM pozdan; 1€ filtresi yalnız çizimde. "Ölç" modu sabit telefonda titremeyi sayıyla verir.
 // Geometri: ../asama0/v2/geometri.json (kutu), ../asama0/v3/geometri_v3.json (taban). mm, iç taban z=0, +z kameraya.
 
-const SURUM = "v1.5";   // her yayında artır; ekranda görünür (doğru sürüm mü kontrolü)
+const SURUM = "v1.6";   // her yayında artır; ekranda görünür (doğru sürüm mü kontrolü)
 
 const G = {
   dis: 30,            // kutu dış kenar (kapak da 30)
@@ -342,6 +342,7 @@ function kutuBul(src, alan) {
     // gölge reddi: kutu İKİ tonlu (gri kapak + siyah duvar), gölge tek tonlu ve siyaha inmez.
     // En büyük birkaç adayı sırayla dene, doğrulamayı geçen ilkini al.
     adaylar.sort((x, y) => y[1] - x[1]);
+    let yedek = null;
     for (const [i, silAlan] of adaylar.slice(0, 4)) {
       const c = kont.get(i);
       teshis.silAlan = silAlan; teshis.silKont = c.data32S.length / 2;
@@ -363,12 +364,13 @@ function kutuBul(src, alan) {
           }
           reddedilen.push(kare ? `kenar yumuşak ${keskin.toFixed(2)} (gölge?)` : "kare değil (gölge?)");
         } else reddedilen.push("gri kapak yok (gölge?)");
+        if (yedek === null) yedek = i;   // hiçbiri doğrulanmazsa en büyük aday "şüpheli" olarak kullanılır
         c.delete(); continue;
       }
       // kapak çıkık: siyah duvar halkası alanın ~%46'sı; adayda yeterince gerçekten siyah piksel olmalı
       const siyah = siyahOrani(gri, c, t / 0.8);
       teshis.siyahOrani = +siyah.toFixed(2);
-      if (siyah < KUTU_SIYAH_ORAN) { reddedilen.push(`siyah az %${Math.round(siyah * 100)} (gölge?)`); c.delete(); continue; }
+      if (siyah < KUTU_SIYAH_ORAN) { reddedilen.push(`siyah az %${Math.round(siyah * 100)} (gölge?)`); if (yedek === null) yedek = i; c.delete(); continue; }
       const yak = new cv.Mat();
       cv.approxPolyDP(c, yak, 0.04 * cv.arcLength(c, true), true);
       let pts = [], yontem;
@@ -385,6 +387,16 @@ function kutuBul(src, alan) {
       sonuc = { kose: koseSirala(pts), yontem: "silüet, " + yontem, kont: c.data32S.slice() };
       c.delete();
       break;
+    }
+    if (!sonuc && yedek !== null) {
+      // yumuşak ret: doğrulanan aday yoksa en büyük adayı eski yolla al ama "şüpheli" işaretle
+      const c = kont.get(yedek), yak = new cv.Mat();
+      cv.approxPolyDP(c, yak, 0.04 * cv.arcLength(c, true), true);
+      let pts = [];
+      if (yak.rows === 4 && cv.isContourConvex(yak)) { for (let j = 0; j < 4; j++) pts.push({ x: yak.data32S[j * 2], y: yak.data32S[j * 2 + 1] }); pts = koseIncelt(c.data32S, pts); }
+      else pts = cv.RotatedRect.points(cv.minAreaRect(c)).map((p) => ({ x: p.x, y: p.y }));
+      sonuc = { kose: koseSirala(pts), yontem: "şüpheli", kont: c.data32S.slice() };
+      yak.delete(); c.delete();
     }
     teshis.reddedilen = reddedilen;
   } finally { gri.delete(); ikili.delete(); kont.delete(); hiy.delete(); }
@@ -1051,14 +1063,14 @@ function dongu(meta) {
       const tk = takipEt(src, gri, simdi);
       if (!tk) { oncekiPoz = null; cizimFiltre.mkutu = cizimFiltre.mzarf = cizimFiltre.mkup = undefined; }
       const kutu = tk && tk.kutu;
-      ctx.globalAlpha = tk && tk.durum === "doğrulanmadı" ? 0.5 : 1;
+      ctx.globalAlpha = tk && (tk.durum === "doğrulanmadı" || tk.kutu.yontem === "şüpheli") ? 0.45 : 1;
       if (kutu) {
         if (tk.durum === "yeni") { oncekiPoz = null; cizimFiltre.mkutu = cizimFiltre.mzarf = cizimFiltre.mkup = undefined; }
         const poz = pozBulMarkersiz(kutu.kose, W, H);
         if (poz) {
           overlayCiz(poz, s, tKare, "m", m === "ikisi" ? "#ff5cf0" : "#36d6c3");
           // ölçüme yalnız bu karede gerçekten tespit edilmiş köşe girer (takip köprüsü değil)
-          if (tk.durum === "yeni" || tk.durum === "doğrulandı") kayit.markersiz = kareKaydi(poz, kutu.yontem.split(",")[0], kutu.kose);
+          if ((tk.durum === "yeni" || tk.durum === "doğrulandı") && kutu.yontem !== "şüpheli") kayit.markersiz = kareKaydi(poz, kutu.yontem.split(",")[0], kutu.kose);
           const t = poz.tvec.data64F;
           bilgi.push(`MARKERSIZ ${tk.durum.toUpperCase()} · ${kutu.yontem} · ${Math.hypot(t[0], t[1], t[2]).toFixed(0)} mm` + (poz.olcumeUygun ? "" : " · ölçüme uygun değil (kapak çıkık)"));
           if (!anaPoz) anaPoz = poz; else pozSil(poz);
