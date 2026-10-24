@@ -7,7 +7,8 @@ const APP = path.join(__dirname, "..", "app");
 
 // --- tarayıcı taklidi ---
 const el = () => ({ getContext: () => new Proxy({}, { get: () => () => {} }), style: {}, classList: { add() {}, toggle() {}, remove() {} },
-  checked: true, value: "65", textContent: "", width: 0, height: 0 });
+  checked: true, value: "65", textContent: "", width: 0, height: 0,
+  toBlob: (f) => f({ type: "image/jpeg" }), click() { global.indirilen = (global.indirilen || 0) + 1; } });
 const els = {};
 let cagrilar = new Map(), cagriId = 0;
 const iz = { stop() {}, getSettings: () => ({}), getCapabilities: () => ({}), applyConstraints: async () => {} };
@@ -166,6 +167,19 @@ async function testler() {
       kontrol(`gerçek kare (${ad}): kapak bulunur, köşe hatası < 6 px`, k && k.yontem === "gri kapak" && hata < 6, k ? `${k.yontem}, max ${hata.toFixed(1)} px` : "yok");
     }
     src.delete();
+  }
+
+  // 5b) Foto: paylaş menüsü açmaz; anahtarsız telefona iner, anahtarlı repoya gider (indirme yok)
+  {
+    let paylasildi = 0; navigator.share = async () => { paylasildi++; }; navigator.canShare = () => true;
+    URL.createObjectURL = () => "blob:x"; global.indirilen = 0;
+    calistir("kayitDurum.anahtar = null"); await calistir("teshisPaylas()");
+    const yazi1 = calistir('$("bildirim").textContent'), ind1 = global.indirilen;
+    calistir("kayitDurum.anahtar = 'x'; blobYukle = async () => true; dosyaYukle = async () => true"); await calistir("teshisPaylas()");
+    const yazi2 = calistir('$("bildirim").textContent');
+    calistir("kayitDurum.anahtar = null");
+    kontrol("foto: paylaş menüsü yok, anahtarsız iner, anahtarlı yalnız gönderir", paylasildi === 0 && ind1 === 1 && global.indirilen === 1 && /indirildi/.test(yazi1) && /kaydedildi/.test(yazi2),
+      JSON.stringify({ paylasildi, ind1, ind2: global.indirilen, yazi1, yazi2 }));
   }
 
   // 6) arayüz: kodun kullandığı her id sayfada var

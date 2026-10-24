@@ -4,7 +4,7 @@
 // Ölçüm her zaman HAM pozdan; 1€ filtresi yalnız çizimde. "Ölç" modu sabit telefonda titremeyi sayıyla verir.
 // Geometri: ../asama0/v2/geometri.json (kutu), ../asama0/v3/geometri_v3.json (taban). mm, iç taban z=0, +z kameraya.
 
-const SURUM = "v1.11";   // her yayında artır; ekranda görünür (doğru sürüm mü kontrolü)
+const SURUM = "v1.12";   // her yayında artır; ekranda görünür (doğru sürüm mü kontrolü)
 
 const G = {
   dis: 30,            // kutu dış kenar (kapak da 30)
@@ -202,9 +202,26 @@ async function teshisPaylas() {
   c.fillStyle = "#fff"; c.font = `${yazi}px monospace`;
   satirlar.forEach((t, i) => c.fillText(t, 8, ustH + mh + 14 + (i + 1) * (yazi + 6)));
   const blob = await new Promise((ok) => k.toBlob(ok, "image/jpeg", 0.9));
-  if (kayitDurum.anahtar) { blobYukle("teshis.jpg", blob); jsonYukle("teshis", { surum: SURUM, mod: mod(), teshis, kapakTakili, kalib }); }
-  await paylas(blob, `foto-${SURUM}-${Date.now()}.jpg`);
+  // paylaş menüsü yok: anahtar varsa kayıt reposuna gider (bilgisayardan okunur), yoksa telefona iner
+  const no = ++fotoSayi;
+  if (kayitDurum.anahtar) {
+    bildir(`Foto ${no} gönderiliyor…`);
+    const h = document.createElement("canvas"); h.width = video.videoWidth; h.height = video.videoHeight;
+    h.getContext("2d").drawImage(video, 0, 0);   // tam çözünürlüklü ham kare (ölçüm bilgisayarda yeniden koşulur)
+    const ham = await new Promise((ok) => h.toBlob(ok, "image/jpeg", HAM.kalite));
+    jsonYukle(`foto${no}`, { surum: SURUM, mod: mod(), teshis, kapakTakili, kalib });
+    if (ham) blobYukle(`foto${no}-ham.jpg`, ham);
+    if (await blobYukle(`foto${no}.jpg`, blob)) { bildir(`Foto ${no} kaydedildi ✓`); return; }
+    bildir(`Foto ${no} gönderilemedi (${kayitDurum.hata || "?"}), telefona indirildi`);
+  } else bildir(`Foto ${no} telefona indirildi`);
+  indir(blob, `foto${no}-${SURUM}-${Date.now()}.jpg`);
 }
+let fotoSayi = 0, bildirimZaman = 0;
+function bildir(t) {
+  const el = $("bildirim"); el.textContent = t; el.style.opacity = 1;
+  clearTimeout(bildirimZaman); bildirimZaman = setTimeout(() => { el.style.opacity = 0; }, 2500);
+}
+function indir(blob, ad) { const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = ad; a.click(); }
 
 // --- küçük 3B yardımcılar (Mat açmadan) ---
 function rodrigues(r) {
