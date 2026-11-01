@@ -1,19 +1,21 @@
 # AR Overlay
 
-Telefon tarayıcısında, kutunun içindeki gizli küpü kamera görüntüsüne bindiren deney düzeneği.
+A phone-browser AR experiment: a cube hidden inside a box is drawn over the camera view.
 
-**Soru:** Dışarıdan takip, içerideki nesne hareket edince ne kadar yanılır?
+**Question:** when the object inside moves, how wrong does tracking from the outside get?
 
-**Deney:**
-1. Küp kutunun ortasındayken overlay doğru oturur. Bu ideal durum.
-2. Küp çalkalanınca overlay yanılır.
-3. Hata, önceden hesaplanan zarfla kıyaslanır.
+**Experiment:**
+1. With the cube centered in the box, the overlay lines up.
+2. Shake the box and the overlay drifts.
+3. The error is compared against a precomputed envelope.
 
-- `app/`: web uygulaması (OpenCV.js 4.9.0). Canlı adres: https://rynnat.github.io/ar-overlay/app/
-- `asama0/v2/`: CadQuery modeli (`kutu.py`), STL'ler ve `geometri.json`
+**Live demo:** https://rynnat.github.io/ar-overlay/app/
 
-## Durum
+## Contents
 
-v0, markersız: Beyaz kağıt üstündeki koyu kutunun üst yüzü bulunur ve konumu solvePnP (IPPE_SQUARE) ile hesaplanır.
+- `app/`: web app (OpenCV.js 4.9.0)
+- `asama0/v2/`: CadQuery model (`kutu.py`), STLs and `geometri.json`
 
-Kamera kalibrasyonu yok; görüş açısı elle ayarlanır.
+## Status
+
+v0, markerless: the top face of a dark box on white paper is detected and its pose is estimated with solvePnP (IPPE_SQUARE). No camera calibration yet; the field of view is set by hand. Results: pending.
